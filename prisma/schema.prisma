@@ -1,0 +1,302 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum MemberRole {
+  DEVELOPER
+  QA
+  MANAGER
+}
+
+enum WorkItemType {
+  ISSUE
+  MERGE_REQUEST
+  EPIC
+}
+
+enum WorkItemState {
+  OPEN
+  IN_PROGRESS
+  IN_REVIEW
+  QA
+  BLOCKED
+  DONE
+  CLOSED
+}
+
+enum Priority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum HealthStatus {
+  HEALTHY
+  AT_RISK
+  CRITICAL
+  UNKNOWN
+}
+
+enum SyncSource {
+  GITLAB_API
+  DOM_EXTRACTION
+  MANUAL
+}
+
+enum Connect3030Status {
+  PENDING
+  SCHEDULED
+  COMPLETED
+  SKIPPED
+}
+
+// ─── Team & People ───────────────────────────────────────────────────────────
+
+model Team {
+  id        String       @id @default(cuid())
+  name      String
+  slug      String       @unique
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  members   TeamMember[]
+  sprints   Sprint[]
+}
+
+model TeamMember {
+  id           String     @id @default(cuid())
+  teamId       String
+  name         String
+  email        String?
+  role         MemberRole @default(DEVELOPER)
+  gitlabUserId Int?
+  gitlabHandle String?
+  capacity     Int        @default(40)
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  team      Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  workItems WorkItem[] @relation("Assignee")
+  reviews   WorkItem[] @relation("Reviewer")
+  connectSessions Connect3030Session[]
+
+  @@unique([teamId, email])
+  @@index([teamId])
+}
+
+// ─── GitLab Projects & Workflows ─────────────────────────────────────────────
+
+model GitLabProject {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  gitlabId      Int?     @unique
+  gitlabPath    String?
+  description   String?
+  webUrl        String?
+  defaultBranch String   @default("main")
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workflow  ProjectWorkflow?
+  workItems WorkItem[]
+  releases  Release[]
+  sprints   Sprint[]
+}
+
+model ProjectWorkflow {
+  id        String            @id @default(cuid())
+  projectId String            @unique
+  name      String
+  isDefault Boolean           @default(true)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  project GitLabProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  columns WorkflowColumn[]
+}
+
+model WorkflowColumn {
+  id         String   @id @default(cuid())
+  workflowId String
+  name       String
+  slug       String
+  position   Int
+  color      String?
+  wipLimit   Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  workflow  ProjectWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workItems WorkItem[]
+
+  @@unique([workflowId, slug])
+  @@index([workflowId])
+}
+
+// ─── Delivery ────────────────────────────────────────────────────────────────
+
+model Sprint {
+  id        String    @id @default(cuid())
+  teamId    String
+  projectId String?
+  name      String
+  goal      String?
+  startDate DateTime
+  endDate   DateTime
+  isActive  Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  team      Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  project   GitLabProject? @relation(fields: [projectId], references: [id])
+  workItems WorkItem[]
+
+  @@index([teamId])
+  @@index([projectId])
+}
+
+model Release {
+  id          String    @id @default(cuid())
+  projectId   String
+  version     String
+  name        String?
+  description String?
+  targetDate  DateTime?
+  releasedAt  DateTime?
+  isDraft     Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  project GitLabProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, version])
+  @@index([projectId])
+}
+
+// ─── Work Items (Issues, MRs) ────────────────────────────────────────────────
+
+model WorkItem {
+  id              String        @id @default(cuid())
+  projectId       String
+  sprintId        String?
+  columnId        String?
+  assigneeId      String?
+  reviewerId      String?
+  type            WorkItemType
+  state           WorkItemState @default(OPEN)
+  priority        Priority      @default(MEDIUM)
+  health          HealthStatus  @default(UNKNOWN)
+  gitlabIid       Int?
+  gitlabId        Int?          @unique
+  title           String
+  description     String?
+  labels          String[]      @default([])
+  milestoneId     Int?
+  milestoneTitle  String?
+  storyPoints     Int?
+  dueDate         DateTime?
+  blockedReason   String?
+  reviewStatus    String?
+  qaStatus        String?
+  lastActivityAt  DateTime?
+  syncSource      SyncSource    @default(MANUAL)
+  webUrl          String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  project  GitLabProject   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sprint   Sprint?         @relation(fields: [sprintId], references: [id])
+  column   WorkflowColumn? @relation(fields: [columnId], references: [id])
+  assignee TeamMember?     @relation("Assignee", fields: [assigneeId], references: [id])
+  reviewer TeamMember?     @relation("Reviewer", fields: [reviewerId], references: [id])
+
+  @@index([projectId])
+  @@index([assigneeId])
+  @@index([state])
+  @@index([priority])
+}
+
+// ─── Governance ──────────────────────────────────────────────────────────────
+
+model GovernanceRule {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  category    String
+  severity    String   @default("warning")
+  isEnabled   Boolean  @default(true)
+  config      Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── Sync & Jobs ─────────────────────────────────────────────────────────────
+
+model SyncRun {
+  id         String    @id @default(cuid())
+  source     SyncSource
+  entityType String
+  status     String    @default("pending")
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  itemsCount Int       @default(0)
+  error      String?
+  metadata   Json      @default("{}")
+
+  @@index([source, entityType])
+  @@index([startedAt])
+}
+
+// ─── FY Planning ─────────────────────────────────────────────────────────────
+
+model PlanningDocument {
+  id         String   @id @default(cuid())
+  slug       String   @unique
+  name       String
+  fiscalYear String
+  sheets     Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model KpiSheetDocument {
+  id         String   @id @default(cuid())
+  slug       String   @unique
+  team       String
+  fiscalYear String
+  sheetData  Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// ─── 30:30 Connect (monthly 1:1) ─────────────────────────────────────────────
+
+model Connect3030Session {
+  id          String            @id @default(cuid())
+  memberId    String
+  monthKey    String
+  status      Connect3030Status @default(PENDING)
+  scheduledAt DateTime?
+  completedAt DateTime?
+  autoBrief   Json              @default("{}")
+  responses   Json              @default("{}")
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  member TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, monthKey])
+  @@index([monthKey])
+  @@index([memberId])
+}

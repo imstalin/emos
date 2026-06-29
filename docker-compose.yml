@@ -1,0 +1,12 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: emos-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - emos_redis_data:/data
+
+volumes:
+  emos_redis_data:

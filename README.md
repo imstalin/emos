@@ -1,36 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Engineering Manager OS
 
-## Getting Started
+Personal productivity platform for engineering managers — delivery visibility, GitLab integration, governance, and AI-assisted decision making.
 
-First, run the development server:
+## Phase 1 (Complete)
+
+- Next.js 16 + React 19 + TypeScript + Tailwind CSS + shadcn/ui
+- Feature-based architecture with service layer and domain types
+- PostgreSQL schema (Prisma) for teams, projects, workflows, work items, governance
+- Full dashboard with team status, blockers, sprint/release health, QA, workload
+- App shell with sidebar navigation, dark/light theme, and placeholder routes
+- Demo data fallback when database is unavailable
+
+## Quick Start
+
+### Prerequisites
+
+- Node.js 20.19+ recommended (works on 20.11 with Prisma 6)
+- Docker (for PostgreSQL and Redis)
+
+### Setup
 
 ```bash
+# Install dependencies
+npm install
+
+# Start infrastructure
+docker compose up -d
+
+# Configure environment
+cp .env.example .env
+
+# Generate Prisma client and run migrations
+npm run db:generate
+npm run db:push
+npm run db:seed
+
+# Start development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Without Database
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The dashboard works out of the box with demo data if PostgreSQL is not running.
 
-## Learn More
+## Architecture
 
-To learn more about Next.js, take a look at the following resources:
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for design decisions and folder structure.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Scripts
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Start development server |
+| `npm run build` | Production build |
+| `npm run db:migrate` | Run Prisma migrations |
+| `npm run db:seed` | Seed team, projects, workflows |
+| `npm run test` | Run unit tests |
 
-## Deploy on Vercel
+## Roadmap
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Phase | Scope |
+|-------|-------|
+| **1** | Setup, architecture, database, dashboard, navigation, theme |
+| **2** | GitLab API + Chrome extension sync engine |
+| **3** | Issue dashboard, merge requests, labels, comments |
+| **4** | AI assistant, priority engine, follow-ups, release notes, timesheets |
+| **5** | Governance scores, reports, analytics, notifications |
+| **6** | Performance, caching, testing, deployment |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Team (Seeded)
+
+**Developers:** Saravana Kumar, Manikandan Prabhu, Gowtham Raj, Ramanathan, Jawahar
+
+**QA:** Preethi, Ruthrakanth, Kadar Selvam
+
+**Projects:** Release Observations, Admin (each with configurable workflow columns)
