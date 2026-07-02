@@ -40,6 +40,44 @@ export interface GitLabIssue {
   weight: number | null;
 }
 
+export interface GitLabMilestone {
+  id: number;
+  title: string;
+  state: string;
+}
+
+export interface GitLabCreateIssuePayload {
+  title: string;
+  description: string;
+  labels?: string;
+  weight?: number;
+  milestone_id?: number;
+  assignee_ids?: number[];
+  due_date?: string;
+}
+
+export interface GitLabIssueTimeStats {
+  time_estimate: number;
+  total_time_spent: number;
+  human_time_estimate: string | null;
+  human_total_time_spent: string | null;
+}
+
+export interface GitLabEpic {
+  id: number;
+  iid: number;
+  work_item_id: number;
+  group_id: number;
+  title: string;
+  description: string | null;
+  state: "opened" | "closed";
+  web_url: string;
+  start_date: string | null;
+  due_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface GitLabMergeRequest {
   id: number;
   iid: number;

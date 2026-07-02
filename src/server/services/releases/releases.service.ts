@@ -1,8 +1,10 @@
-import type { HealthStatus, Priority, WorkItemState } from "@prisma/client";
+import type { HealthStatus, Priority, ReleaseStream, WorkItemState } from "@prisma/client";
 
 import type {
+  MonthlyReleaseGroup,
   ReleaseChecklistItem,
   ReleaseDetail,
+  ReleaseEpicDetail,
   ReleasesDashboard,
 } from "@/domain/types/releases";
 import type { SprintHealth, WorkItemSummary } from "@/domain/types/dashboard";
@@ -10,6 +12,11 @@ import { classifyProductBacklog } from "@/domain/backlog/classify-product-backlo
 import { checkDatabaseConnection, db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { getDemoReleasesDashboard } from "@/server/services/releases/releases-demo-data";
+import {
+  formatMonthKeyLabel,
+  streamSortOrder,
+} from "@/server/services/releases/release-epic.parser";
+import { releaseEpicSyncService } from "@/server/services/releases/release-epic-sync.service";
 import {
   buildMonitoredProjectWhere,
   getMonitoredProjectDbIds,
@@ -27,6 +34,9 @@ function mapWorkItem(item: {
   labels: string[];
   webUrl: string | null;
   milestoneTitle?: string | null;
+  storyPoints?: number | null;
+  timeSpentSeconds?: number | null;
+  timeEstimateSeconds?: number | null;
   assignee: { name: string } | null;
   project: { name: string };
 }): WorkItemSummary {
@@ -124,7 +134,29 @@ function buildChecklist(
   ];
 }
 
+function estimatePlannedHours(item: {
+  storyPoints: number | null;
+  timeEstimateSeconds: number | null;
+}): number {
+  if (item.timeEstimateSeconds && item.timeEstimateSeconds > 0) {
+    return Math.round((item.timeEstimateSeconds / 3600) * 10) / 10;
+  }
+  if (item.storyPoints && item.storyPoints > 0) {
+    return item.storyPoints * 4;
+  }
+  return 0;
+}
+
+function spentHoursFromItem(item: { timeSpentSeconds: number | null }): number {
+  if (!item.timeSpentSeconds || item.timeSpentSeconds <= 0) return 0;
+  return Math.round((item.timeSpentSeconds / 3600) * 10) / 10;
+}
+
 export class ReleasesService {
+  async syncMonthlyEpics() {
+    return releaseEpicSyncService.syncMonthlyReleaseEpics();
+  }
+
   async getDashboard(): Promise<ReleasesDashboard> {
     const isConnected = await checkDatabaseConnection();
     if (!isConnected) {
@@ -133,19 +165,227 @@ export class ReleasesService {
     }
 
     try {
+      const epicCount = await db.releaseEpic.count();
+      if (epicCount > 0) {
+        return await this.buildFromReleaseEpics();
+      }
+
       const releaseCount = await db.release.count();
       if (releaseCount === 0) {
         return getDemoReleasesDashboard();
       }
 
-      return await this.buildFromDatabase();
+      return await this.buildLegacyFromDatabase();
     } catch (error) {
       logger.error("Failed to load releases dashboard", { error });
       return getDemoReleasesDashboard();
     }
   }
 
-  private async buildFromDatabase(): Promise<ReleasesDashboard> {
+  private async buildFromReleaseEpics(): Promise<ReleasesDashboard> {
+    const [releaseEpics, activeSprint] = await Promise.all([
+      db.releaseEpic.findMany({
+        orderBy: [{ monthKey: "desc" }, { epicIid: "asc" }],
+      }),
+      db.sprint.findFirst({
+        where: { isActive: true },
+        include: {
+          workItems: {
+            where: mergeWorkItemWhere(
+              { state: { notIn: ["DONE", "CLOSED"] } },
+              await buildMonitoredProjectWhere(),
+            ),
+            include: { project: true, assignee: true },
+            orderBy: [{ priority: "asc" }, { lastActivityAt: "desc" }],
+            take: 20,
+          },
+        },
+      }),
+    ]);
+
+    const epicDetails = await Promise.all(
+      releaseEpics.map((epic) => this.buildReleaseEpicDetail(epic)),
+    );
+
+    const grouped = new Map<string, ReleaseEpicDetail[]>();
+    for (const epic of epicDetails) {
+      const bucket = grouped.get(epic.monthKey) ?? [];
+      bucket.push(epic);
+      grouped.set(epic.monthKey, bucket);
+    }
+
+    const monthlyReleases: MonthlyReleaseGroup[] = [...grouped.entries()]
+      .sort(([a], [b]) => b.localeCompare(a))
+      .slice(0, 6)
+      .map(([monthKey, epics]) => {
+        const sortedEpics = [...epics].sort(
+          (a, b) => streamSortOrder(a.stream) - streamSortOrder(b.stream),
+        );
+        const totalPlannedHours = sortedEpics.reduce(
+          (sum, epic) => sum + epic.plannedHours,
+          0,
+        );
+        const totalSpentHours = sortedEpics.reduce(
+          (sum, epic) => sum + epic.spentHours,
+          0,
+        );
+        const totalItems = sortedEpics.reduce(
+          (sum, epic) => sum + epic.totalItems,
+          0,
+        );
+        const doneItems = sortedEpics.reduce(
+          (sum, epic) => sum + epic.doneItems,
+          0,
+        );
+
+        return {
+          monthKey,
+          label: formatMonthKeyLabel(monthKey),
+          epics: sortedEpics,
+          totalPlannedHours: Math.round(totalPlannedHours * 10) / 10,
+          totalSpentHours: Math.round(totalSpentHours * 10) / 10,
+          progressPercent:
+            totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : 0,
+          health: computeOverallHealth(
+            sortedEpics.flatMap((epic) =>
+              epic.workItems.filter(
+                (item) => item.state !== "DONE" && item.state !== "CLOSED",
+              ),
+            ),
+          ),
+        };
+      });
+
+    let sprintHealth: SprintHealth | null = null;
+    let sprintWorkItems: WorkItemSummary[] = [];
+
+    if (activeSprint) {
+      const allSprintItems = await db.workItem.findMany({
+        where: { sprintId: activeSprint.id },
+      });
+      const completed = allSprintItems.filter((item) => item.state === "DONE");
+      const totalPoints = allSprintItems.reduce(
+        (sum, item) => sum + (item.storyPoints ?? 0),
+        0,
+      );
+      const completedPoints = completed.reduce(
+        (sum, item) => sum + (item.storyPoints ?? 0),
+        0,
+      );
+
+      sprintHealth = {
+        id: activeSprint.id,
+        name: activeSprint.name,
+        goal: activeSprint.goal,
+        startDate: activeSprint.startDate.toISOString(),
+        endDate: activeSprint.endDate.toISOString(),
+        completedPoints,
+        totalPoints,
+        velocity: completedPoints,
+        health: computeOverallHealth(allSprintItems),
+        daysRemaining: Math.max(
+          0,
+          Math.ceil(
+            (activeSprint.endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+          ),
+        ),
+      };
+
+      sprintWorkItems = activeSprint.workItems.map(mapWorkItem);
+    }
+
+    const openEpics = epicDetails.filter((epic) => epic.state === "opened");
+    const atRiskEpics = openEpics.filter(
+      (epic) => epic.health === "AT_RISK" || epic.health === "CRITICAL",
+    );
+
+    return {
+      generatedAt: new Date().toISOString(),
+      activeSprint: sprintHealth,
+      sprintWorkItems,
+      monthlyReleases,
+      releases: [],
+      summary: {
+        upcoming: openEpics.length,
+        draft: 0,
+        atRisk: atRiskEpics.length,
+        activeMonths: monthlyReleases.filter((group) =>
+          group.epics.some((epic) => epic.state === "opened"),
+        ).length,
+        openEpics: openEpics.length,
+        totalPlannedHours: Math.round(
+          openEpics.reduce((sum, epic) => sum + epic.plannedHours, 0) * 10,
+        ) / 10,
+        totalSpentHours: Math.round(
+          openEpics.reduce((sum, epic) => sum + epic.spentHours, 0) * 10,
+        ) / 10,
+      },
+    };
+  }
+
+  private async buildReleaseEpicDetail(epic: {
+    id: string;
+    epicIid: number;
+    title: string;
+    stream: ReleaseStream;
+    monthKey: string;
+    webUrl: string | null;
+    state: string;
+  }): Promise<ReleaseEpicDetail> {
+    const items = await db.workItem.findMany({
+      where: { parentEpicIid: epic.epicIid },
+      include: { project: true, assignee: true },
+      orderBy: [{ priority: "asc" }, { lastActivityAt: "desc" }],
+    });
+
+    const openItems = items.filter(
+      (item) => item.state !== "DONE" && item.state !== "CLOSED",
+    );
+    const doneItems = items.filter(
+      (item) => item.state === "DONE" || item.state === "CLOSED",
+    );
+    const blockedItems = openItems.filter((item) => item.state === "BLOCKED");
+    const inReviewItems = openItems.filter((item) => item.state === "IN_REVIEW");
+    const qaItems = openItems.filter((item) => item.state === "QA");
+
+    const plannedHours = items.reduce(
+      (sum, item) => sum + estimatePlannedHours(item),
+      0,
+    );
+    const spentHours = items.reduce(
+      (sum, item) => sum + spentHoursFromItem(item),
+      0,
+    );
+
+    const progressPercent =
+      items.length > 0
+        ? Math.round((doneItems.length / items.length) * 100)
+        : 0;
+
+    return {
+      id: epic.id,
+      epicIid: epic.epicIid,
+      title: epic.title,
+      stream: epic.stream,
+      monthKey: epic.monthKey,
+      webUrl: epic.webUrl,
+      state: epic.state,
+      plannedHours: Math.round(plannedHours * 10) / 10,
+      spentHours: Math.round(spentHours * 10) / 10,
+      progressPercent,
+      openItems: openItems.length,
+      blockedItems: blockedItems.length,
+      totalItems: items.length,
+      doneItems: doneItems.length,
+      inReviewItems: inReviewItems.length,
+      qaItems: qaItems.length,
+      health: computeOverallHealth(openItems),
+      checklist: buildChecklist(openItems),
+      workItems: openItems.slice(0, 15).map(mapWorkItem),
+    };
+  }
+
+  private async buildLegacyFromDatabase(): Promise<ReleasesDashboard> {
     const monitoredWhere = await buildMonitoredProjectWhere();
     const monitoredDbIds = await getMonitoredProjectDbIds();
     const activeFilter = mergeWorkItemWhere(
@@ -221,6 +461,7 @@ export class ReleasesService {
       generatedAt: new Date().toISOString(),
       activeSprint: sprintHealth,
       sprintWorkItems,
+      monthlyReleases: [],
       releases: releaseDetails,
       summary: {
         upcoming: releaseDetails.filter((release) => !release.isDraft).length,
@@ -229,6 +470,10 @@ export class ReleasesService {
           (release) =>
             release.health === "AT_RISK" || release.health === "CRITICAL",
         ).length,
+        activeMonths: 0,
+        openEpics: 0,
+        totalPlannedHours: 0,
+        totalSpentHours: 0,
       },
     };
   }

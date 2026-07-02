@@ -287,6 +287,18 @@ export class GitLabSyncService {
         }
       }
 
+      let epicSync = { epicsSynced: 0, issuesSynced: 0 };
+      try {
+        const { releaseEpicSyncService } = await import(
+          "@/server/services/releases/release-epic-sync.service"
+        );
+        epicSync = await releaseEpicSyncService.syncMonthlyReleaseEpics();
+      } catch (epicError) {
+        logger.warn("Monthly release epic sync failed during GitLab sync", {
+          error: epicError,
+        });
+      }
+
       await db.syncRun.update({
         where: { id: syncRun.id },
         data: {
@@ -297,6 +309,8 @@ export class GitLabSyncService {
             projectsProcessed: projects.length,
             itemsClosed,
             membersLinked,
+            epicsSynced: epicSync.epicsSynced,
+            epicIssuesSynced: epicSync.issuesSynced,
           },
         },
       });

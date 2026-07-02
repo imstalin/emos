@@ -53,6 +53,7 @@ export function getDemoReleasesDashboard(): ReleasesDashboard {
     generatedAt: metrics.generatedAt,
     activeSprint: metrics.sprintHealth,
     sprintWorkItems: metrics.currentWork.slice(0, 8),
+    monthlyReleases: [],
     releases,
     summary: {
       upcoming: releases.length,
@@ -60,6 +61,10 @@ export function getDemoReleasesDashboard(): ReleasesDashboard {
       atRisk: releases.filter(
         (release) => release.health === "AT_RISK" || release.health === "CRITICAL",
       ).length,
+      activeMonths: 0,
+      openEpics: 0,
+      totalPlannedHours: 0,
+      totalSpentHours: 0,
     },
   };
 }

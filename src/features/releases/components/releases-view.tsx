@@ -13,34 +13,52 @@ import type { ReleasesDashboard } from "@/domain/types/releases";
 import { SprintHealthCard } from "@/features/dashboard/components/health-cards";
 import { WorkItemList } from "@/features/dashboard/components/work-item-list";
 import { ReleaseCard } from "@/features/releases/components/release-card";
-import { formatRelativeDate } from "@/lib/formatters";
+import { ReleaseEpicCard } from "@/features/releases/components/release-epic-card";
+import { ReleaseEpicSyncButton } from "@/features/releases/components/release-epic-sync-button";
+import { formatRelativeDate, getHealthClass } from "@/lib/formatters";
 
 interface ReleasesViewProps {
   data: ReleasesDashboard;
 }
 
 export function ReleasesView({ data }: ReleasesViewProps) {
+  const hasMonthlyReleases = data.monthlyReleases.length > 0;
+  const openEpicCount = data.summary.openEpics || data.summary.upcoming;
+
   return (
     <>
       <AppHeader
         title="Release Management"
-        description={`Delivery readiness · Updated ${formatRelativeDate(data.generatedAt)}`}
+        description={`Monthly release epics · Updated ${formatRelativeDate(data.generatedAt)}`}
         actions={
-          <Badge variant="outline" className="gap-1">
-            <Rocket className="size-3" />
-            {data.releases.length} active releases
-          </Badge>
+          <div className="flex flex-wrap items-center gap-3">
+            <ReleaseEpicSyncButton />
+            <Badge variant="outline" className="gap-1">
+              <Rocket className="size-3" />
+              {openEpicCount} open epics
+            </Badge>
+          </div>
         }
       />
 
       <div className="flex flex-1 flex-col gap-6 p-4 lg:p-6">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <SummaryCard label="Upcoming" value={data.summary.upcoming} />
-          <SummaryCard label="Draft" value={data.summary.draft} />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <SummaryCard label="Active months" value={data.summary.activeMonths} />
+          <SummaryCard label="Open epics" value={data.summary.openEpics} />
           <SummaryCard
             label="At risk"
             value={data.summary.atRisk}
             highlight={data.summary.atRisk > 0}
+          />
+          <SummaryCard
+            label="Planned hours"
+            value={data.summary.totalPlannedHours}
+            suffix="h"
+          />
+          <SummaryCard
+            label="Spent hours"
+            value={data.summary.totalSpentHours}
+            suffix="h"
           />
         </div>
 
@@ -68,29 +86,67 @@ export function ReleasesView({ data }: ReleasesViewProps) {
           </Card>
         ) : null}
 
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight">Releases</h2>
-            <p className="text-sm text-muted-foreground">
-              Readiness checklists and open work scoped to each release
-            </p>
-          </div>
+        {hasMonthlyReleases ? (
+          <div className="space-y-6">
+            {data.monthlyReleases.map((group) => (
+              <section key={group.monthKey} className="space-y-4">
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-semibold tracking-tight">
+                      {group.label} Release
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Product, Observations, and Mobile epics with effort rollups
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <Badge variant="outline" className={getHealthClass(group.health)}>
+                      {group.health.replace("_", " ")}
+                    </Badge>
+                    <span className="text-muted-foreground">
+                      {group.totalSpentHours}h / {group.totalPlannedHours}h ·{" "}
+                      {group.progressPercent}% complete
+                    </span>
+                  </div>
+                </div>
 
-          {data.releases.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center text-sm text-muted-foreground">
-                No unreleased versions configured. Add releases in the database
-                or seed data.
-              </CardContent>
-            </Card>
-          ) : (
+                <div className="grid gap-4 xl:grid-cols-3">
+                  {group.epics.map((epic) => (
+                    <ReleaseEpicCard key={epic.id} epic={epic} />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        ) : null}
+
+        {!hasMonthlyReleases && data.releases.length > 0 ? (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">
+                Version releases
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Legacy version-scoped releases (sync monthly epics to replace this view)
+              </p>
+            </div>
             <div className="grid gap-4 xl:grid-cols-2">
               {data.releases.map((release) => (
                 <ReleaseCard key={release.id} release={release} />
               ))}
             </div>
-          )}
-        </div>
+          </div>
+        ) : null}
+
+        {!hasMonthlyReleases && data.releases.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center text-sm text-muted-foreground">
+              No monthly release epics synced yet. Click{" "}
+              <strong>Sync release epics</strong> to pull Phoenix group epics like
+              &quot;June Product Release - 2026&quot;.
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
     </>
   );
@@ -99,10 +155,12 @@ export function ReleasesView({ data }: ReleasesViewProps) {
 function SummaryCard({
   label,
   value,
+  suffix = "",
   highlight = false,
 }: {
   label: string;
   value: number;
+  suffix?: string;
   highlight?: boolean;
 }) {
   return (
@@ -117,6 +175,7 @@ function SummaryCard({
           }
         >
           {value}
+          {suffix}
         </p>
       </CardContent>
     </Card>

@@ -6,7 +6,13 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-const REQUIRED_MODELS = ["kpiSheetDocument", "planningDocument", "connect3030Session"] as const;
+const REQUIRED_MODELS = [
+  "kpiSheetDocument",
+  "planningDocument",
+  "roadmapDocument",
+  "connect3030Session",
+  "releaseEpic",
+] as const;
 
 function isPrismaClientStale(client: PrismaClient): boolean {
   return REQUIRED_MODELS.some((model) => !(model in client));

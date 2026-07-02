@@ -53,6 +53,13 @@ describe("mapMergeRequestState", () => {
 describe("mapPriority", () => {
   it("detects critical labels", () => {
     expect(mapPriority(["Priority::Critical"], null)).toBe("CRITICAL");
+    expect(mapPriority(["priority::blocker"], null)).toBe("CRITICAL");
+    expect(mapPriority(["ProductionPriority::P1"], null)).toBe("CRITICAL");
+  });
+
+  it("detects project 6100 priority labels", () => {
+    expect(mapPriority(["priority::high"], null)).toBe("HIGH");
+    expect(mapPriority(["priority::medium"], null)).toBe("MEDIUM");
   });
 
   it("uses weight as fallback", () => {

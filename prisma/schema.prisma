@@ -51,6 +51,12 @@ enum SyncSource {
   MANUAL
 }
 
+enum ReleaseStream {
+  PRODUCT
+  OBSERVATIONS
+  MOBILE
+}
+
 enum Connect3030Status {
   PENDING
   SCHEDULED
@@ -183,6 +189,29 @@ model Release {
   @@index([projectId])
 }
 
+model ReleaseEpic {
+  id            String        @id @default(cuid())
+  gitlabGroupId Int
+  epicIid       Int
+  workItemId    Int?
+  title         String
+  monthKey      String
+  stream        ReleaseStream
+  state         String        @default("opened")
+  webUrl        String?
+  description   String?
+  startDate     DateTime?
+  dueDate       DateTime?
+  lastSyncedAt  DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@unique([gitlabGroupId, epicIid])
+  @@index([monthKey])
+  @@index([state])
+  @@index([stream])
+}
+
 // ─── Work Items (Issues, MRs) ────────────────────────────────────────────────
 
 model WorkItem {
@@ -209,6 +238,9 @@ model WorkItem {
   reviewStatus    String?
   qaStatus        String?
   lastActivityAt  DateTime?
+  parentEpicIid   Int?
+  timeSpentSeconds Int?
+  timeEstimateSeconds Int?
   syncSource      SyncSource    @default(MANUAL)
   webUrl          String?
   createdAt       DateTime      @default(now())
@@ -224,6 +256,7 @@ model WorkItem {
   @@index([assigneeId])
   @@index([state])
   @@index([priority])
+  @@index([parentEpicIid])
 }
 
 // ─── Governance ──────────────────────────────────────────────────────────────
@@ -268,6 +301,17 @@ model PlanningDocument {
   sheets     Json
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+model RoadmapDocument {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  fiscalYear  String
+  sourceSheet String   @default("FY27 V1")
+  items       Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model KpiSheetDocument {

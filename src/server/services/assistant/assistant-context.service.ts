@@ -32,13 +32,18 @@ export async function buildAssistantContext(): Promise<string> {
     )
     .join("\n");
 
-  const releaseLines = releases.releases
-    .slice(0, 5)
-    .map(
+  const releaseLines = [
+    ...releases.monthlyReleases.flatMap((group) =>
+      group.epics.slice(0, 3).map(
+        (epic) =>
+          `- ${epic.title}: ${epic.spentHours}/${epic.plannedHours}h, ${epic.progressPercent}% complete, ${epic.openItems} open, health ${epic.health}`,
+      ),
+    ),
+    ...releases.releases.slice(0, 3).map(
       (release) =>
-        `- v${release.version} ${release.name ?? ""} (${release.projectName}): ${release.progressPercent}% complete, ${release.openItems} open, ${release.blockedItems} blocked, health ${release.health}`,
-    )
-    .join("\n");
+        `- v${release.version} ${release.name ?? ""} (${release.projectName}): ${release.progressPercent}% complete, ${release.openItems} open`,
+    ),
+  ].join("\n");
 
   const sprintSection = team.activeSprint
     ? `Active sprint: ${team.activeSprint.name}

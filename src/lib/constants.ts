@@ -14,8 +14,10 @@ export const NAV_ITEMS = [
     items: [
       { title: "Product Backlog", href: "/product-backlog", icon: "ClipboardList" },
       { title: "FY Planning", href: "/planning", icon: "CalendarRange" },
+      { title: "Roadmap Maintenance", href: "/roadmap", icon: "Map" },
       { title: "Phoenix KPI", href: "/kpi/phoenix", icon: "BarChart3" },
       { title: "GitLab Activity", href: "/gitlab", icon: "GitBranch" },
+      { title: "Project 6100 Hygiene", href: "/projects/6100", icon: "ShieldCheck" },
       { title: "Release Management", href: "/releases", icon: "Rocket" },
       { title: "Follow-ups", href: "/follow-ups", icon: "Bell" },
     ],
@@ -24,6 +26,7 @@ export const NAV_ITEMS = [
     title: "Intelligence",
     items: [
       { title: "AI Assistant", href: "/assistant", icon: "Sparkles" },
+      { title: "LinkedIn Ideas", href: "/linkedin", icon: "Megaphone" },
       { title: "Timesheets", href: "/timesheets", icon: "Clock" },
       { title: "Governance", href: "/governance", icon: "Shield" },
     ],

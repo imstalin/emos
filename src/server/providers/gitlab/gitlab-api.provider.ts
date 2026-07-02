@@ -1,7 +1,12 @@
 import type {
   GitLabConnectionTest,
+  GitLabCreateIssuePayload,
+  GitLabEpic,
   GitLabIssue,
+  GitLabIssueTimeStats,
   GitLabMergeRequest,
+  GitLabMilestone,
+  GitLabNote,
   GitLabProject,
   GitLabUser,
 } from "@/domain/types/gitlab";
@@ -97,6 +102,96 @@ export class GitLabApiProvider implements GitLabProvider {
     );
   }
 
+  async listProjectMilestones(
+    projectId: number,
+    state: "active" | "closed" | "all" = "active",
+  ): Promise<GitLabMilestone[]> {
+    return this.fetchPaginated<GitLabMilestone>(
+      `/projects/${projectId}/milestones`,
+      { state },
+    );
+  }
+
+  async createProjectIssue(
+    projectId: number,
+    payload: GitLabCreateIssuePayload,
+  ): Promise<GitLabIssue> {
+    const body = new URLSearchParams();
+    body.set("title", payload.title);
+    body.set("description", payload.description);
+    if (payload.labels) body.set("labels", payload.labels);
+    if (payload.weight != null) body.set("weight", String(payload.weight));
+    if (payload.milestone_id != null) {
+      body.set("milestone_id", String(payload.milestone_id));
+    }
+    if (payload.assignee_ids?.length) {
+      for (const id of payload.assignee_ids) {
+        body.append("assignee_ids[]", String(id));
+      }
+    }
+    if (payload.due_date) body.set("due_date", payload.due_date);
+
+    const response = await fetch(
+      `${this.config.baseUrl}/api/v4/projects/${projectId}/issues`,
+      {
+        method: "POST",
+        headers: {
+          "PRIVATE-TOKEN": this.config.token,
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: body.toString(),
+        cache: "no-store",
+      },
+    );
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(
+        `GitLab API ${response.status} ${response.statusText}: ${text.slice(0, 200)}`,
+      );
+    }
+
+    return response.json() as Promise<GitLabIssue>;
+  }
+
+  async getIssueTimeStats(
+    projectId: number,
+    issueIid: number,
+  ): Promise<GitLabIssueTimeStats> {
+    return this.fetch<GitLabIssueTimeStats>(
+      `/projects/${projectId}/issues/${issueIid}/time_stats`,
+    );
+  }
+
+  async listGroupEpics(
+    state: "opened" | "closed" | "all" = "opened",
+  ): Promise<GitLabEpic[]> {
+    return this.fetchPaginated<GitLabEpic>(
+      `/groups/${this.config.groupId}/epics`,
+      {
+        state,
+        order_by: "updated_at",
+        sort: "desc",
+      },
+    );
+  }
+
+  async listEpicIssues(epicIid: number): Promise<GitLabIssue[]> {
+    return this.fetchPaginated<GitLabIssue>(
+      `/groups/${this.config.groupId}/epics/${epicIid}/issues`,
+      {},
+    );
+  }
+
+  async assignIssueToEpic(epicIid: number, issueId: number): Promise<void> {
+    await this.fetch<unknown>(
+      `/groups/${this.config.groupId}/epics/${epicIid}/issues/${issueId}`,
+      {},
+      "POST",
+    );
+  }
+
   private async fetchPaginated<T>(
     path: string,
     params: Record<string, string> = {},
@@ -127,14 +222,19 @@ export class GitLabApiProvider implements GitLabProvider {
   private async fetch<T>(
     path: string,
     params: Record<string, string> = {},
+    method: "GET" | "POST" = "GET",
   ): Promise<T> {
-    const response = await this.request(path, params);
+    const response = await this.request(path, params, method);
+    if (response.status === 204) {
+      return undefined as T;
+    }
     return response.json() as Promise<T>;
   }
 
   private async request(
     path: string,
     params: Record<string, string> = {},
+    method: "GET" | "POST" = "GET",
   ): Promise<Response> {
     const url = new URL(`${this.config.baseUrl}/api/v4${path}`);
     for (const [key, value] of Object.entries(params)) {
@@ -142,6 +242,7 @@ export class GitLabApiProvider implements GitLabProvider {
     }
 
     const response = await fetch(url.toString(), {
+      method,
       headers: {
         "PRIVATE-TOKEN": this.config.token,
         Accept: "application/json",

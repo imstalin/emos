@@ -42,14 +42,26 @@ export function mapPriority(
   labels: string[],
   weight: number | null,
 ): Priority {
-  if (hasLabel(labels, ["critical", "p1", "priority::1", "blocker"])) {
+  if (
+    hasLabel(labels, [
+      "critical",
+      "p1",
+      "priority::1",
+      "priority::blocker",
+      "blocker",
+      "productionpriority::p1",
+    ])
+  ) {
     return "CRITICAL";
   }
-  if (hasLabel(labels, ["high", "p2", "priority::2"])) {
+  if (hasLabel(labels, ["high", "p2", "priority::2", "productionpriority::p2"])) {
     return "HIGH";
   }
-  if (hasLabel(labels, ["low", "p4", "priority::4"])) {
+  if (hasLabel(labels, ["low", "p4", "priority::4", "productionpriority::p3"])) {
     return "LOW";
+  }
+  if (hasLabel(labels, ["priority::medium"])) {
+    return "MEDIUM";
   }
 
   if (weight !== null) {

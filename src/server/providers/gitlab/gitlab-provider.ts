@@ -1,7 +1,11 @@
 import type {
   GitLabConnectionTest,
+  GitLabCreateIssuePayload,
+  GitLabEpic,
   GitLabIssue,
+  GitLabIssueTimeStats,
   GitLabMergeRequest,
+  GitLabMilestone,
   GitLabNote,
   GitLabProject,
   GitLabUser,
@@ -19,4 +23,21 @@ export interface GitLabProvider {
     projectId: number,
     mergeRequestIid: number,
   ): Promise<GitLabNote[]>;
+  listProjectMilestones(
+    projectId: number,
+    state?: "active" | "closed" | "all",
+  ): Promise<GitLabMilestone[]>;
+  createProjectIssue(
+    projectId: number,
+    payload: GitLabCreateIssuePayload,
+  ): Promise<GitLabIssue>;
+  getIssueTimeStats(
+    projectId: number,
+    issueIid: number,
+  ): Promise<GitLabIssueTimeStats>;
+  listGroupEpics(
+    state?: "opened" | "closed" | "all",
+  ): Promise<GitLabEpic[]>;
+  listEpicIssues(epicIid: number): Promise<GitLabIssue[]>;
+  assignIssueToEpic(epicIid: number, issueId: number): Promise<void>;
 }

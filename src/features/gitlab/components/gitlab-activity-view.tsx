@@ -95,7 +95,12 @@ export function GitLabActivityView({ initialStatus }: GitLabActivityViewProps) {
         title="GitLab Activity"
         description="Synced issues and merge requests from your GitLab group"
         actions={
-          <Button variant="outline" size="sm" render={<Link href="/settings" />}>
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<Link href="/settings" />}
+          >
             <GitBranch />
             Manage sync
           </Button>
