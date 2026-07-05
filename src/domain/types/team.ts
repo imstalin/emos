@@ -1,5 +1,7 @@
 import type { MemberRole } from "@prisma/client";
 
+import type { WorkloadBasis } from "@/domain/workload/compute-workload";
+import type { DayOnePlanningSummary } from "@/domain/sprint/planning-capacity";
 import type {
   SprintHealth,
   TeamMemberSummary,
@@ -11,11 +13,13 @@ export interface TeamMemberDetail extends TeamMemberSummary {
   blockedCount: number;
   inReviewCount: number;
   inQaCount: number;
+  qaOwnedCount: number;
   mergeRequestCount: number;
   issueCount: number;
   utilizationPercent: number;
   assignedItems: WorkItemSummary[];
   reviewItems: WorkItemSummary[];
+  qaOwnedItems: WorkItemSummary[];
 }
 
 export interface TeamDashboardData {
@@ -23,9 +27,12 @@ export interface TeamDashboardData {
   sprint: SprintHealth | null;
   teamCapacity: {
     totalCapacity: number;
+    totalWipLimit: number;
     allocatedPoints: number;
+    allocatedItems: number;
     utilizationPercent: number;
     membersOverCapacity: number;
+    loadBasis: WorkloadBasis;
   };
   members: TeamMemberDetail[];
   unassigned: {
@@ -36,6 +43,9 @@ export interface TeamDashboardData {
     developers: number;
     qaMembers: number;
   };
+  dayOne: DayOnePlanningSummary;
+  sprintWorkItems: WorkItemSummary[];
+  qaQueue: WorkItemSummary[];
 }
 
 export type TeamRoleFilter = MemberRole | "ALL";

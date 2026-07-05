@@ -14,6 +14,9 @@ export type {
   WorkItemType,
 };
 
+import type { WorkloadBasis } from "@/domain/workload/compute-workload";
+import type { DayOnePlanningSummary } from "@/domain/sprint/planning-capacity";
+
 export interface TeamMemberSummary {
   id: string;
   name: string;
@@ -21,6 +24,10 @@ export interface TeamMemberSummary {
   capacity: number;
   assignedPoints: number;
   activeItems: number;
+  utilizationPercent: number;
+  isOverloaded: boolean;
+  loadBasis: WorkloadBasis;
+  wipLimit: number;
   health: HealthStatus;
   lastActivityAt: string | null;
 }
@@ -33,6 +40,7 @@ export interface WorkItemSummary {
   priority: Priority;
   health: HealthStatus;
   assigneeName: string | null;
+  qaOwnerName: string | null;
   projectName: string;
   dueDate: string | null;
   labels: string[];
@@ -49,9 +57,18 @@ export interface SprintHealth {
   endDate: string;
   completedPoints: number;
   totalPoints: number;
+  completedItems: number;
+  totalItems: number;
+  inFlightItems: number;
   velocity: number;
   health: HealthStatus;
   daysRemaining: number;
+  loadBasis: WorkloadBasis;
+  qaPairedCount: number;
+  qaUnassignedCount: number;
+  inReviewCount: number;
+  inQaCount: number;
+  sprintBalanced: boolean;
 }
 
 export interface ReleaseHealth {
@@ -95,8 +112,13 @@ export interface DashboardMetrics {
   workload: TeamMemberSummary[];
   teamCapacity: {
     totalCapacity: number;
+    totalWipLimit: number;
     allocatedPoints: number;
+    allocatedItems: number;
     utilizationPercent: number;
     membersOverCapacity: number;
+    loadBasis: WorkloadBasis;
   };
+  dayOne: DayOnePlanningSummary;
+  sprintWorkItems: WorkItemSummary[];
 }

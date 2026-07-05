@@ -9,6 +9,7 @@ import {
   classifyProductBacklog,
   partitionProductBacklog,
 } from "@/domain/backlog/classify-product-backlog";
+import { buildDayOnePlanningSummary } from "@/domain/sprint/planning-capacity";
 
 const now = new Date();
 
@@ -25,12 +26,13 @@ function daysAgo(days: number): string {
 }
 
 function withBacklogMeta(
-  item: Omit<WorkItemSummary, "milestoneTitle" | "backlogCategory"> &
-    Partial<Pick<WorkItemSummary, "milestoneTitle">>,
+  item: Omit<WorkItemSummary, "milestoneTitle" | "backlogCategory" | "qaOwnerName"> &
+    Partial<Pick<WorkItemSummary, "milestoneTitle" | "qaOwnerName">>,
 ): WorkItemSummary {
   const milestoneTitle = item.milestoneTitle ?? null;
   return {
     ...item,
+    qaOwnerName: item.qaOwnerName ?? null,
     milestoneTitle,
     backlogCategory: classifyProductBacklog(milestoneTitle, item.labels),
   };
@@ -153,6 +155,10 @@ const DEMO_MEMBERS: TeamMemberSummary[] = [
     capacity: 40,
     assignedPoints: 13,
     activeItems: 3,
+    utilizationPercent: 38,
+    isOverloaded: false,
+    loadBasis: "story_points",
+    wipLimit: 8,
     health: "HEALTHY",
     lastActivityAt: daysAgo(0),
   },
@@ -163,6 +169,10 @@ const DEMO_MEMBERS: TeamMemberSummary[] = [
     capacity: 40,
     assignedPoints: 21,
     activeItems: 4,
+    utilizationPercent: 53,
+    isOverloaded: true,
+    loadBasis: "story_points",
+    wipLimit: 8,
     health: "AT_RISK",
     lastActivityAt: daysAgo(0),
   },
@@ -173,6 +183,10 @@ const DEMO_MEMBERS: TeamMemberSummary[] = [
     capacity: 40,
     assignedPoints: 18,
     activeItems: 2,
+    utilizationPercent: 45,
+    isOverloaded: false,
+    loadBasis: "story_points",
+    wipLimit: 8,
     health: "CRITICAL",
     lastActivityAt: daysAgo(2),
   },
@@ -183,6 +197,10 @@ const DEMO_MEMBERS: TeamMemberSummary[] = [
     capacity: 40,
     assignedPoints: 8,
     activeItems: 2,
+    utilizationPercent: 20,
+    isOverloaded: false,
+    loadBasis: "story_points",
+    wipLimit: 8,
     health: "HEALTHY",
     lastActivityAt: daysAgo(1),
   },
@@ -193,6 +211,10 @@ const DEMO_MEMBERS: TeamMemberSummary[] = [
     capacity: 40,
     assignedPoints: 15,
     activeItems: 3,
+    utilizationPercent: 38,
+    isOverloaded: false,
+    loadBasis: "story_points",
+    wipLimit: 8,
     health: "AT_RISK",
     lastActivityAt: daysAgo(0),
   },
@@ -203,6 +225,10 @@ const DEMO_MEMBERS: TeamMemberSummary[] = [
     capacity: 40,
     assignedPoints: 12,
     activeItems: 4,
+    utilizationPercent: 50,
+    isOverloaded: false,
+    loadBasis: "story_points",
+    wipLimit: 8,
     health: "HEALTHY",
     lastActivityAt: daysAgo(0),
   },
@@ -213,6 +239,10 @@ const DEMO_MEMBERS: TeamMemberSummary[] = [
     capacity: 40,
     assignedPoints: 10,
     activeItems: 3,
+    utilizationPercent: 25,
+    isOverloaded: false,
+    loadBasis: "story_points",
+    wipLimit: 8,
     health: "HEALTHY",
     lastActivityAt: daysAgo(1),
   },
@@ -223,6 +253,10 @@ const DEMO_MEMBERS: TeamMemberSummary[] = [
     capacity: 40,
     assignedPoints: 8,
     activeItems: 2,
+    utilizationPercent: 20,
+    isOverloaded: false,
+    loadBasis: "story_points",
+    wipLimit: 8,
     health: "HEALTHY",
     lastActivityAt: daysAgo(0),
   },
@@ -236,9 +270,18 @@ const DEMO_SPRINT: SprintHealth = {
   endDate: daysFromNow(7),
   completedPoints: 34,
   totalPoints: 68,
+  completedItems: 12,
+  totalItems: 24,
+  inFlightItems: 8,
   velocity: 32,
   health: "AT_RISK",
   daysRemaining: 7,
+  loadBasis: "story_points",
+  qaPairedCount: 18,
+  qaUnassignedCount: 6,
+  inReviewCount: 3,
+  inQaCount: 2,
+  sprintBalanced: false,
 };
 
 const DEMO_RELEASES: ReleaseHealth[] = [
@@ -316,11 +359,25 @@ export function getDemoDashboardMetrics(): DashboardMetrics {
     workload: DEMO_MEMBERS,
     teamCapacity: {
       totalCapacity,
+      totalWipLimit: DEMO_MEMBERS.length * 8,
       allocatedPoints,
+      allocatedItems: DEMO_MEMBERS.reduce((sum, member) => sum + member.activeItems, 0),
       utilizationPercent: Math.round((allocatedPoints / totalCapacity) * 100),
-      membersOverCapacity: DEMO_MEMBERS.filter(
-        (m) => m.assignedPoints > m.capacity * 0.5,
-      ).length,
+      membersOverCapacity: DEMO_MEMBERS.filter((member) => member.isOverloaded).length,
+      loadBasis: "story_points",
     },
+    dayOne: buildDayOnePlanningSummary(
+      DEMO_MEMBERS.map((member) => ({
+        id: member.id,
+        name: member.name,
+        role: member.role,
+        capacity: member.capacity,
+      })),
+      24,
+      18,
+    ),
+    sprintWorkItems: DEMO_WORK_ITEMS.filter((item) =>
+      item.milestoneTitle?.toLowerCase().includes("sprint"),
+    ),
   };
 }

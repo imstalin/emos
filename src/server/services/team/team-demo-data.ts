@@ -39,6 +39,7 @@ export function getDemoTeamDashboard(): TeamDashboardData {
       blockedCount: assignedItems.filter((item) => item.state === "BLOCKED").length,
       inReviewCount: assignedItems.filter((item) => item.state === "IN_REVIEW").length,
       inQaCount: assignedItems.filter((item) => item.state === "QA").length,
+      qaOwnedCount: member.role === "QA" ? assignedItems.length : 0,
       mergeRequestCount: assignedItems.filter(
         (item) => item.type === "MERGE_REQUEST",
       ).length,
@@ -46,6 +47,7 @@ export function getDemoTeamDashboard(): TeamDashboardData {
       utilizationPercent,
       assignedItems,
       reviewItems,
+      qaOwnedItems: member.role === "QA" ? assignedItems.slice(0, 4) : [],
     };
   });
 
@@ -59,5 +61,8 @@ export function getDemoTeamDashboard(): TeamDashboardData {
       developers: metrics.teamStatus.developers,
       qaMembers: metrics.teamStatus.qaMembers,
     },
+    dayOne: metrics.dayOne,
+    sprintWorkItems: metrics.sprintWorkItems,
+    qaQueue: metrics.pendingReviews,
   };
 }

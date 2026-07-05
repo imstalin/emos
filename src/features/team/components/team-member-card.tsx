@@ -18,12 +18,13 @@ import {
   getHealthClass,
   getInitials,
 } from "@/lib/formatters";
+import { formatWorkloadLoadLabel } from "@/lib/workload-labels";
 
 export function TeamMemberCard({ member }: { member: TeamMemberDetail }) {
-  const overloaded = member.assignedPoints > member.capacity * 0.5;
+  const overloaded = member.isOverloaded;
 
   return (
-    <Card size="sm" className="h-full">
+    <Card size="sm" className="flex flex-col">
       <CardHeader className="space-y-3">
         <div className="flex items-start gap-3">
           <Avatar size="lg">
@@ -45,6 +46,9 @@ export function TeamMemberCard({ member }: { member: TeamMemberDetail }) {
 
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline">{member.activeItems} active</Badge>
+          {member.role === "QA" && member.qaOwnedCount > 0 ? (
+            <Badge variant="secondary">{member.qaOwnedCount} to test</Badge>
+          ) : null}
           {member.blockedCount > 0 ? (
             <Badge variant="destructive">{member.blockedCount} blocked</Badge>
           ) : null}
@@ -71,7 +75,15 @@ export function TeamMemberCard({ member }: { member: TeamMemberDetail }) {
             className={overloaded ? "[&>div]:bg-destructive" : undefined}
           />
           <div className="flex justify-between text-[10px] text-muted-foreground">
-            <span>{member.assignedPoints} pts · {member.utilizationPercent}% load</span>
+            <span>
+              {formatWorkloadLoadLabel(
+                member.loadBasis,
+                member.assignedPoints,
+                member.activeItems,
+                member.wipLimit,
+              )}{" "}
+              · {member.utilizationPercent}% load
+            </span>
             <span>
               {member.lastActivityAt
                 ? `Active ${formatRelativeDate(member.lastActivityAt)}`
@@ -81,7 +93,7 @@ export function TeamMemberCard({ member }: { member: TeamMemberDetail }) {
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4 pt-0">
+      <CardContent className="min-h-0 space-y-4 pt-0">
         <div>
           <p className="mb-2 text-xs font-medium text-muted-foreground">
             Assigned work
@@ -92,6 +104,19 @@ export function TeamMemberCard({ member }: { member: TeamMemberDetail }) {
             compact
           />
         </div>
+
+        {member.role === "QA" && member.qaOwnedItems.length > 0 ? (
+          <div>
+            <p className="mb-2 text-xs font-medium text-muted-foreground">
+              Assigned to test (day 1)
+            </p>
+            <WorkItemList
+              items={member.qaOwnedItems}
+              emptyMessage="No QA assignments"
+              compact
+            />
+          </div>
+        ) : null}
 
         {member.reviewItems.length > 0 ? (
           <div>

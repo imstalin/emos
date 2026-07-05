@@ -69,3 +69,21 @@ export function getPublicGitLabConfig(): Pick<
   if (!config) return null;
   return { url: config.url, groupId: config.groupId };
 }
+
+export function getReleaseIssueProjectId(): number | null {
+  const raw = process.env.GITLAB_RELEASE_ISSUE_PROJECT_ID?.trim();
+  if (!raw) return null;
+  const id = Number(raw);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+export function getReleaseGroupIds(): string[] {
+  const config = getGitLabConfig();
+  const fromList = (process.env.GITLAB_RELEASE_GROUP_IDS ?? "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (fromList.length > 0) return fromList;
+  return config?.groupId ? [config.groupId] : [];
+}

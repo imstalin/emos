@@ -2,6 +2,7 @@ import type { ReleaseHealth, SprintHealth } from "@/domain/types/dashboard";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { cnHealthDot, formatRelativeDate, getHealthClass } from "@/lib/formatters";
+import { formatSprintProgressLabel } from "@/lib/workload-labels";
 
 export function SprintHealthCard({ sprint }: { sprint: SprintHealth }) {
   const progress =
@@ -17,6 +18,16 @@ export function SprintHealthCard({ sprint }: { sprint: SprintHealth }) {
           {sprint.goal ? (
             <p className="mt-1 text-sm text-muted-foreground">{sprint.goal}</p>
           ) : null}
+          <p className="mt-1 text-xs text-muted-foreground">
+            {sprint.inFlightItems} in-flight · {sprint.inReviewCount} in review ·{" "}
+            {sprint.inQaCount} in QA
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            QA paired {sprint.qaPairedCount}
+            {sprint.qaUnassignedCount > 0
+              ? ` · ${sprint.qaUnassignedCount} need tester`
+              : " · all stories have QA"}
+          </p>
         </div>
         <Badge variant="outline" className={getHealthClass(sprint.health)}>
           <span className={cnHealthDot(sprint.health)} />
@@ -27,7 +38,13 @@ export function SprintHealthCard({ sprint }: { sprint: SprintHealth }) {
       <div className="space-y-2">
         <div className="flex justify-between text-xs text-muted-foreground">
           <span>
-            {sprint.completedPoints} / {sprint.totalPoints} points
+            {formatSprintProgressLabel(
+              sprint.loadBasis,
+              sprint.completedPoints,
+              sprint.totalPoints,
+              sprint.completedItems,
+              sprint.totalItems,
+            )}
           </span>
           <span>{progress}% complete</span>
         </div>

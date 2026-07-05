@@ -7,7 +7,9 @@ export default async function TeamDashboardPage() {
 
   return (
     <AppShell>
-      <TeamDashboardView data={data} />
+      <div className="flex h-svh min-h-0 flex-col overflow-hidden">
+        <TeamDashboardView data={data} />
+      </div>
     </AppShell>
   );
 }

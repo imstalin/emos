@@ -15,6 +15,8 @@ import { WorkItemList } from "@/features/dashboard/components/work-item-list";
 import { ReleaseCard } from "@/features/releases/components/release-card";
 import { ReleaseEpicCard } from "@/features/releases/components/release-epic-card";
 import { ReleaseEpicSyncButton } from "@/features/releases/components/release-epic-sync-button";
+import { PhoenixReleasePlanCard } from "@/features/releases/components/phoenix-release-plan-card";
+import { ImpactMatrixCard } from "@/features/releases/components/impact-matrix-card";
 import { formatRelativeDate, getHealthClass } from "@/lib/formatters";
 
 interface ReleasesViewProps {
@@ -61,6 +63,10 @@ export function ReleasesView({ data }: ReleasesViewProps) {
             suffix="h"
           />
         </div>
+
+        <PhoenixReleasePlanCard />
+
+        <ImpactMatrixCard />
 
         {data.activeSprint ? (
           <Card>

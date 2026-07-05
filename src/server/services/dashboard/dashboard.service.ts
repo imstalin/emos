@@ -1,56 +1,36 @@
 import type { HealthStatus, Priority, WorkItemState } from "@prisma/client";
 
-import {
-  classifyProductBacklog,
-  partitionProductBacklog,
-} from "@/domain/backlog/classify-product-backlog";
+import { partitionProductBacklog } from "@/domain/backlog/classify-product-backlog";
+import { buildDayOnePlanningSummary } from "@/domain/sprint/planning-capacity";
 import type {
   DashboardMetrics,
   ReleaseHealth,
-  SprintHealth,
   TeamMemberSummary,
-  WorkItemSummary,
 } from "@/domain/types/dashboard";
 import { checkDatabaseConnection, db } from "@/lib/db";
 import { logger } from "@/lib/logger";
-import { getDemoDashboardMetrics } from "@/server/services/dashboard/demo-data";
+import {
+  computeMemberWorkload,
+  computeTeamWorkloadTotals,
+} from "@/domain/workload/compute-workload";
+import {
+  buildActiveWorkWhere,
+  buildDeliveryWorkloadWhere,
+} from "@/domain/workload/delivery-work";
 import {
   buildMonitoredProjectWhere,
   getMonitoredProjectDbIds,
   mergeWorkItemWhere,
 } from "@/server/services/gitlab/monitored-projects";
 
-function mapWorkItem(item: {
-  id: string;
-  title: string;
-  type: WorkItemSummary["type"];
-  state: WorkItemState;
-  priority: Priority;
-  health: HealthStatus;
-  dueDate: Date | null;
-  labels: string[];
-  webUrl: string | null;
-  milestoneTitle?: string | null;
-  assignee: { name: string } | null;
-  project: { name: string };
-}): WorkItemSummary {
-  const milestoneTitle = item.milestoneTitle ?? null;
-  return {
-    id: item.id,
-    title: item.title,
-    type: item.type,
-    state: item.state,
-    priority: item.priority,
-    health: item.health,
-    assigneeName: item.assignee?.name ?? null,
-    projectName: item.project.name,
-    dueDate: item.dueDate?.toISOString() ?? null,
-    labels: item.labels,
-    milestoneTitle,
-    backlogCategory: classifyProductBacklog(milestoneTitle, item.labels),
-    webUrl: item.webUrl,
-  };
-}
+import {
+  dashboardWorkItemInclude,
+  loadActiveSprintRecord,
+  loadActiveSprintWorkItems,
+  mapDashboardWorkItem,
+} from "./dashboard-shared";
+import { getDemoDashboardMetrics } from "./demo-data";
+import { buildSprintHealth } from "./sprint-metrics";
 
 function computeOverallHealth(
   items: { health: HealthStatus }[],
@@ -86,111 +66,93 @@ export class DashboardService {
   private async buildMetricsFromDatabase(): Promise<DashboardMetrics> {
     const monitoredWhere = await buildMonitoredProjectWhere();
     const monitoredDbIds = await getMonitoredProjectDbIds();
-    const activeFilter = mergeWorkItemWhere(
-      { state: { notIn: ["DONE", "CLOSED"] } },
-      monitoredWhere,
-    );
+    const activeFilter = buildActiveWorkWhere(monitoredWhere);
+    const workloadFilter = buildDeliveryWorkloadWhere(monitoredWhere);
 
-    const [
-      members,
-      workItems,
-      activeSprint,
-      releases,
-    ] = await Promise.all([
+    const [members, workItems, activeSprint] = await Promise.all([
       db.teamMember.findMany({
         where: { isActive: true },
-        include: {
-          workItems: {
-            where: activeFilter,
-          },
+        select: {
+          id: true,
+          name: true,
+          role: true,
+          capacity: true,
         },
       }),
       db.workItem.findMany({
         where: activeFilter,
-        include: {
-          assignee: true,
-          project: true,
-        },
+        include: dashboardWorkItemInclude,
         orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
       }),
-      db.sprint.findFirst({
-        where: { isActive: true },
-        include: { workItems: true },
-      }),
-      db.release.findMany({
-        where: {
-          releasedAt: null,
-          ...(monitoredDbIds ? { projectId: { in: monitoredDbIds } } : {}),
-        },
-        include: {
-          project: true,
-        },
-        orderBy: { targetDate: "asc" },
-        take: 5,
-      }),
+      loadActiveSprintRecord(),
     ]);
 
-    const mappedItems = workItems.map(mapWorkItem);
+    const sprintWorkItemRows = activeSprint
+      ? await loadActiveSprintWorkItems(activeSprint, { openOnly: true })
+      : [];
+    const sprintWorkItems = sprintWorkItemRows.map(mapDashboardWorkItem);
 
-    const workload: TeamMemberSummary[] = members.map((member) => ({
-      id: member.id,
-      name: member.name,
-      role: member.role,
-      capacity: member.capacity,
-      assignedPoints: member.workItems.reduce(
-        (sum, item) => sum + (item.storyPoints ?? 0),
-        0,
-      ),
-      activeItems: member.workItems.length,
-      health: computeOverallHealth(member.workItems),
-      lastActivityAt: member.workItems.reduce<string | null>((latest, item) => {
-        const activity = item.lastActivityAt?.toISOString() ?? null;
-        if (!activity) return latest;
-        if (!latest) return activity;
-        return activity > latest ? activity : latest;
-      }, null),
-    }));
+    const releases = await db.release.findMany({
+      where: {
+        releasedAt: null,
+        ...(monitoredDbIds ? { projectId: { in: monitoredDbIds } } : {}),
+      },
+      include: { project: true },
+      orderBy: { targetDate: "asc" },
+      take: 5,
+    });
 
-    const totalCapacity = workload.reduce((sum, m) => sum + m.capacity, 0);
-    const allocatedPoints = workload.reduce(
-      (sum, m) => sum + m.assignedPoints,
-      0,
+    const memberWorkloadRows = await db.teamMember.findMany({
+      where: { isActive: true },
+      include: {
+        workItems: {
+          where: workloadFilter,
+        },
+      },
+    });
+
+    const workload: TeamMemberSummary[] = memberWorkloadRows.map((member) => {
+      const metrics = computeMemberWorkload(
+        member.workItems,
+        member.capacity,
+        member.role,
+      );
+
+      return {
+        id: member.id,
+        name: member.name,
+        role: member.role,
+        capacity: member.capacity,
+        assignedPoints: metrics.assignedPoints,
+        activeItems: metrics.activeItems,
+        utilizationPercent: metrics.utilizationPercent,
+        isOverloaded: metrics.isOverloaded,
+        loadBasis: metrics.loadBasis,
+        wipLimit: metrics.wipLimit,
+        health: computeOverallHealth(member.workItems),
+        lastActivityAt: member.workItems.reduce<string | null>((latest, item) => {
+          const activity = item.lastActivityAt?.toISOString() ?? null;
+          if (!activity) return latest;
+          if (!latest) return activity;
+          return activity > latest ? activity : latest;
+        }, null),
+      };
+    });
+
+    const teamCapacity = computeTeamWorkloadTotals(workload);
+    const dayOne = buildDayOnePlanningSummary(
+      members,
+      sprintWorkItems.length,
+      sprintWorkItems.filter((item) => item.qaOwnerName).length,
     );
 
-    let sprintHealth: SprintHealth | null = null;
-    if (activeSprint) {
-      const completed = activeSprint.workItems.filter(
-        (w) => w.state === "DONE",
-      );
-      const totalPoints = activeSprint.workItems.reduce(
-        (sum, w) => sum + (w.storyPoints ?? 0),
-        0,
-      );
-      const completedPoints = completed.reduce(
-        (sum, w) => sum + (w.storyPoints ?? 0),
-        0,
-      );
-      const endDate = activeSprint.endDate;
-      const daysRemaining = Math.max(
-        0,
-        Math.ceil(
-          (endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
-        ),
-      );
+    const sprintHealth = await buildSprintHealth(
+      activeSprint,
+      monitoredWhere,
+      members,
+    );
 
-      sprintHealth = {
-        id: activeSprint.id,
-        name: activeSprint.name,
-        goal: activeSprint.goal,
-        startDate: activeSprint.startDate.toISOString(),
-        endDate: endDate.toISOString(),
-        completedPoints,
-        totalPoints,
-        velocity: completedPoints,
-        health: computeOverallHealth(activeSprint.workItems),
-        daysRemaining,
-      };
-    }
+    const mappedItems = workItems.map(mapDashboardWorkItem);
 
     const releaseHealth: ReleaseHealth[] = await Promise.all(
       releases.map(async (release) => {
@@ -204,8 +166,6 @@ export class DashboardService {
           ),
         });
         const blocked = items.filter((i) => i.state === "BLOCKED");
-        const total = items.length + blocked.length;
-        const done = total - items.length;
 
         return {
           id: release.id,
@@ -216,19 +176,28 @@ export class DashboardService {
           openItems: items.length,
           blockedItems: blocked.length,
           health: computeOverallHealth(items),
-          progressPercent: total > 0 ? Math.round((done / total) * 100) : 0,
+          progressPercent: 0,
         };
       }),
     );
 
-    const qaItems = mappedItems.filter(
-      (w) => w.state === "QA" || w.labels.some((l) => l.toLowerCase() === "qa"),
-    );
+    const sprintScopedIds = new Set(sprintWorkItems.map((item) => item.id));
+    const qaItems = sprintWorkItems.length
+      ? sprintWorkItems.filter(
+          (w) => w.state === "QA" || w.labels.some((l) => l.toLowerCase() === "qa"),
+        )
+      : mappedItems.filter(
+          (w) => w.state === "QA" || w.labels.some((l) => l.toLowerCase() === "qa"),
+        );
 
     const openItems = mappedItems.filter(
       (w) => w.state !== "DONE" && w.state !== "CLOSED",
     );
     const productBacklog = partitionProductBacklog(openItems);
+
+    const pendingReviews = sprintWorkItems.length
+      ? sprintWorkItems.filter((w) => w.state === "IN_REVIEW")
+      : mappedItems.filter((w) => w.state === "IN_REVIEW");
 
     return {
       generatedAt: new Date().toISOString(),
@@ -239,19 +208,23 @@ export class DashboardService {
         qaMembers: members.filter((m) => m.role === "QA").length,
         overallHealth: computeOverallHealth(workItems),
       },
-      currentWork: mappedItems.filter(
-        (w) => w.state === "IN_PROGRESS" || w.state === "OPEN",
-      ),
+      currentWork: sprintWorkItems.length
+        ? sprintWorkItems.filter(
+            (w) => w.state === "IN_PROGRESS" || w.state === "OPEN",
+          )
+        : mappedItems.filter(
+            (w) => w.state === "IN_PROGRESS" || w.state === "OPEN",
+          ),
       blockers: mappedItems.filter((w) => w.state === "BLOCKED"),
-      highPriority: mappedItems.filter(
+      highPriority: (sprintWorkItems.length ? sprintWorkItems : mappedItems).filter(
         (w) => w.priority === "CRITICAL" || w.priority === "HIGH",
       ),
       releaseHealth,
       sprintHealth,
-      pendingReviews: mappedItems.filter((w) => w.state === "IN_REVIEW"),
+      pendingReviews,
       qaStatus: {
         inQa: qaItems.filter((w) => w.state === "QA").length,
-        awaitingQa: mappedItems.filter((w) => w.state === "IN_REVIEW").length,
+        awaitingQa: pendingReviews.length,
         failedQa: qaItems.filter((w) => w.health === "CRITICAL").length,
         items: qaItems,
       },
@@ -260,17 +233,9 @@ export class DashboardService {
       ),
       productBacklog,
       workload,
-      teamCapacity: {
-        totalCapacity,
-        allocatedPoints,
-        utilizationPercent:
-          totalCapacity > 0
-            ? Math.round((allocatedPoints / totalCapacity) * 100)
-            : 0,
-        membersOverCapacity: workload.filter(
-          (m) => m.assignedPoints > m.capacity * 0.5,
-        ).length,
-      },
+      teamCapacity,
+      dayOne,
+      sprintWorkItems,
     };
   }
 }

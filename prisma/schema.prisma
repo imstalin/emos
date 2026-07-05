@@ -92,6 +92,7 @@ model TeamMember {
   team      Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
   workItems WorkItem[] @relation("Assignee")
   reviews   WorkItem[] @relation("Reviewer")
+  qaOwnedWorkItems WorkItem[] @relation("QaOwner")
   connectSessions Connect3030Session[]
 
   @@unique([teamId, email])
@@ -152,16 +153,17 @@ model WorkflowColumn {
 // ─── Delivery ────────────────────────────────────────────────────────────────
 
 model Sprint {
-  id        String    @id @default(cuid())
-  teamId    String
-  projectId String?
-  name      String
-  goal      String?
-  startDate DateTime
-  endDate   DateTime
-  isActive  Boolean   @default(false)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  teamId            String
+  projectId         String?
+  gitlabMilestoneId Int?      @unique
+  name              String
+  goal              String?
+  startDate         DateTime
+  endDate           DateTime
+  isActive          Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   team      Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
   project   GitLabProject? @relation(fields: [projectId], references: [id])
@@ -241,6 +243,7 @@ model WorkItem {
   parentEpicIid   Int?
   timeSpentSeconds Int?
   timeEstimateSeconds Int?
+  qaOwnerId         String?
   syncSource      SyncSource    @default(MANUAL)
   webUrl          String?
   createdAt       DateTime      @default(now())
@@ -251,9 +254,11 @@ model WorkItem {
   column   WorkflowColumn? @relation(fields: [columnId], references: [id])
   assignee TeamMember?     @relation("Assignee", fields: [assigneeId], references: [id])
   reviewer TeamMember?     @relation("Reviewer", fields: [reviewerId], references: [id])
+  qaOwner  TeamMember?     @relation("QaOwner", fields: [qaOwnerId], references: [id])
 
   @@index([projectId])
   @@index([assigneeId])
+  @@index([qaOwnerId])
   @@index([state])
   @@index([priority])
   @@index([parentEpicIid])
@@ -289,6 +294,23 @@ model SyncRun {
 
   @@index([source, entityType])
   @@index([startedAt])
+}
+
+// ─── GitLab Comments Monitor Audit ───────────────────────────────────────────
+
+model GitLabActionAudit {
+  id         String   @id @default(cuid())
+  actionType String
+  targetType String
+  projectId  Int
+  targetIid  Int
+  payload    Json     @default("{}")
+  result     String
+  error      String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([projectId, targetIid])
 }
 
 // ─── FY Planning ─────────────────────────────────────────────────────────────

@@ -45,10 +45,11 @@ export async function buildAssistantContext(): Promise<string> {
     ),
   ].join("\n");
 
-  const sprintSection = team.activeSprint
-    ? `Active sprint: ${team.activeSprint.name}
-Goal: ${team.activeSprint.goal ?? "—"}
-Progress: ${team.activeSprint.completedPoints}/${team.activeSprint.totalPoints} points, ${team.activeSprint.daysRemaining} days left`
+  const sprintSection = team.sprint
+    ? `Active sprint: ${team.sprint.name}
+Goal: ${team.sprint.goal ?? "—"}
+Progress: ${team.sprint.completedPoints}/${team.sprint.totalPoints} points, ${team.sprint.daysRemaining} days left
+QA paired: ${team.sprint.qaPairedCount}, awaiting QA: ${team.sprint.inReviewCount}`
     : "No active sprint configured.";
 
   return `

@@ -8,6 +8,10 @@ import {
   getHealthClass,
   getInitials,
 } from "@/lib/formatters";
+import {
+  formatTeamCapacityLabel,
+  formatWorkloadLoadLabel,
+} from "@/lib/workload-labels";
 
 export function TeamWorkloadList({ members }: { members: TeamMemberSummary[] }) {
   if (members.length === 0) {
@@ -21,11 +25,7 @@ export function TeamWorkloadList({ members }: { members: TeamMemberSummary[] }) 
   return (
     <ul className="divide-y">
       {members.map((member) => {
-        const utilization = Math.min(
-          100,
-          Math.round((member.assignedPoints / (member.capacity * 0.5)) * 100),
-        );
-        const overloaded = member.assignedPoints > member.capacity * 0.5;
+        const overloaded = member.isOverloaded;
 
         return (
           <li key={member.id} className="flex items-center gap-3 px-4 py-3">
@@ -53,11 +53,18 @@ export function TeamWorkloadList({ members }: { members: TeamMemberSummary[] }) 
               </div>
               <div className="space-y-1">
                 <Progress
-                  value={utilization}
+                  value={member.utilizationPercent}
                   className={overloaded ? "[&>div]:bg-destructive" : undefined}
                 />
                 <div className="flex justify-between text-[10px] text-muted-foreground">
-                  <span>{member.assignedPoints} pts assigned</span>
+                  <span>
+                    {formatWorkloadLoadLabel(
+                      member.loadBasis,
+                      member.assignedPoints,
+                      member.activeItems,
+                      member.wipLimit,
+                    )}
+                  </span>
                   <span>
                     Last active{" "}
                     {member.lastActivityAt
@@ -77,13 +84,19 @@ export function TeamWorkloadList({ members }: { members: TeamMemberSummary[] }) 
 export function TeamCapacityBar({
   utilizationPercent,
   allocatedPoints,
+  allocatedItems,
   totalCapacity,
+  totalWipLimit,
   membersOverCapacity,
+  loadBasis,
 }: {
   utilizationPercent: number;
   allocatedPoints: number;
+  allocatedItems: number;
   totalCapacity: number;
+  totalWipLimit: number;
   membersOverCapacity: number;
+  loadBasis: TeamMemberSummary["loadBasis"];
 }) {
   return (
     <div className="space-y-3 p-4">
@@ -92,14 +105,22 @@ export function TeamCapacityBar({
           <p className="text-3xl font-semibold tabular-nums">
             {utilizationPercent}%
           </p>
-          <p className="text-sm text-muted-foreground">Sprint utilization</p>
+          <p className="text-sm text-muted-foreground">
+            {loadBasis === "story_points" ? "Sprint utilization" : "Delivery load"}
+          </p>
         </div>
         <p className="text-right text-xs text-muted-foreground">
-          {allocatedPoints} / {totalCapacity} story points
+          {formatTeamCapacityLabel(
+            loadBasis,
+            allocatedPoints,
+            allocatedItems,
+            totalCapacity,
+            totalWipLimit,
+          )}
         </p>
       </div>
       <Progress
-        value={utilizationPercent}
+        value={Math.min(100, utilizationPercent)}
         className={
           utilizationPercent > 80 ? "[&>div]:bg-amber-500" : undefined
         }
