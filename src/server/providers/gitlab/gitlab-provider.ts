@@ -1,9 +1,14 @@
 import type {
+  CreateGitLabLabelInput,
+  EnsureGitLabLabelInput,
+  EnsureLabelOptions,
+  EnsureLabelsResult,
   GitLabConnectionTest,
   GitLabCreateIssuePayload,
   GitLabEpic,
   GitLabGroup,
   GitLabIssue,
+  GitLabIssueLabelMutation,
   GitLabIssueLink,
   GitLabIssueTimeStats,
   GitLabJob,
@@ -13,8 +18,10 @@ import type {
   GitLabCreateMilestonePayload,
   GitLabUpdateMilestonePayload,
   GitLabNote,
+  GitLabPaginationOptions,
   GitLabPipeline,
   GitLabProject,
+  GitLabResourceMilestoneEvent,
   GitLabTag,
   GitLabCommit,
   GitLabUpdateIssuePayload,
@@ -39,12 +46,33 @@ export interface GitLabProvider {
   listGroupMembers(): Promise<GitLabUser[]>;
   getProject(projectId: number): Promise<GitLabProject>;
   listProjectIssues(
-    projectId: number,
+    projectId: number | string,
     state?: "opened" | "closed" | "all",
-    options?: { updatedAfter?: string; maxPages?: number },
+    options?: {
+      updatedAfter?: string;
+      maxPages?: number;
+      /** Milestone title. Do not pass a numeric milestone ID here. */
+      milestone?: string;
+      /**
+       * List-issues timebox filter only: Any | None | Upcoming | Started.
+       * Mutually exclusive with `milestone`. Numeric IDs are invalid on list.
+       */
+      milestoneTimebox?: "Any" | "None" | "Upcoming" | "Started";
+    },
+  ): Promise<GitLabIssue[]>;
+  listGroupIssues(
+    groupId: string | number,
+    options?: {
+      state?: "opened" | "closed" | "all";
+      milestone?: string;
+      maxPages?: number;
+    },
   ): Promise<GitLabIssue[]>;
   listProjectMergeRequests(projectId: number): Promise<GitLabMergeRequest[]>;
-  getIssue(projectId: number, issueIid: number): Promise<GitLabIssue>;
+  getIssue(
+    projectId: number | string,
+    issueIid: number,
+  ): Promise<GitLabIssue>;
   getMergeRequest(
     projectId: number,
     mergeRequestIid: number,
@@ -65,7 +93,7 @@ export interface GitLabProvider {
     body: string,
   ): Promise<GitLabNote>;
   updateIssue(
-    projectId: number,
+    projectId: number | string,
     issueIid: number,
     payload: GitLabUpdateIssuePayload,
   ): Promise<GitLabIssue>;
@@ -95,7 +123,29 @@ export interface GitLabProvider {
     milestoneId: number,
     payload: GitLabUpdateMilestonePayload,
   ): Promise<GitLabMilestone>;
-  listProjectLabels(projectId: number): Promise<GitLabLabel[]>;
+  listProjectLabels(
+    projectId: number | string,
+    options?: GitLabPaginationOptions,
+  ): Promise<GitLabLabel[]>;
+  createProjectLabel(
+    projectId: number | string,
+    input: CreateGitLabLabelInput,
+  ): Promise<GitLabLabel>;
+  ensureProjectLabels(
+    projectId: number | string,
+    labels: EnsureGitLabLabelInput[],
+    options?: EnsureLabelOptions,
+  ): Promise<EnsureLabelsResult>;
+  listIssueResourceMilestoneEvents(
+    projectId: number | string,
+    issueIid: number,
+    options?: GitLabPaginationOptions,
+  ): Promise<GitLabResourceMilestoneEvent[]>;
+  updateIssueLabels(
+    projectId: number | string,
+    issueIid: number,
+    mutation: GitLabIssueLabelMutation,
+  ): Promise<GitLabIssue | null>;
   listIssueLinks(projectId: number, issueIid: number): Promise<GitLabIssueLink[]>;
   listMergeRequestPipelines(
     projectId: number,

@@ -12,6 +12,11 @@ const REQUIRED_MODELS = [
   "roadmapDocument",
   "connect3030Session",
   "releaseEpic",
+  "sprintEvaluationRun",
+  "sprintIssueEvaluation",
+  "sprintLabelAction",
+  "sprintManagedLabelOwnership",
+  "sprintIntelligenceProjectConfig",
 ] as const;
 
 function isPrismaClientStale(client: PrismaClient): boolean {

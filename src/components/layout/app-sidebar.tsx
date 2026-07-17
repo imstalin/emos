@@ -8,6 +8,7 @@ import {
   CalendarRange,
   ClipboardList,
   Clock,
+  Gauge,
   GitBranch,
   KanbanSquare,
   LayoutDashboard,
@@ -16,6 +17,7 @@ import {
   Map,
   MessageSquare,
   MessageSquareText,
+  MessageSquareWarning,
   Rocket,
   ShieldCheck,
   Settings,
@@ -48,6 +50,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Users,
   MessageSquare,
   MessageSquareText,
+  MessageSquareWarning,
+  Gauge,
   ClipboardList,
   CalendarRange,
   KanbanSquare,
@@ -61,6 +65,10 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Shield,
   Settings,
 };
+
+const ALL_NAV_HREFS = NAV_ITEMS.flatMap((group) =>
+  group.items.map((item) => item.href),
+);
 
 export function AppSidebar() {
   const pathname = usePathname();
@@ -93,10 +101,19 @@ export function AppSidebar() {
               <SidebarMenu>
                 {group.items.map((item) => {
                   const Icon = ICON_MAP[item.icon] ?? LayoutDashboard;
-                  const isActive =
+                  const matches =
                     item.href === "/"
                       ? pathname === "/"
-                      : pathname.startsWith(item.href);
+                      : pathname === item.href ||
+                        pathname.startsWith(`${item.href}/`);
+                  const hasMoreSpecificMatch = ALL_NAV_HREFS.some(
+                    (href) =>
+                      href !== item.href &&
+                      href.length > item.href.length &&
+                      href.startsWith(`${item.href}/`) &&
+                      (pathname === href || pathname.startsWith(`${href}/`)),
+                  );
+                  const isActive = matches && !hasMoreSpecificMatch;
 
                   return (
                     <SidebarMenuItem key={item.href}>

@@ -64,6 +64,47 @@ enum Connect3030Status {
   SKIPPED
 }
 
+enum SprintEvaluationRunMode {
+  ANALYZE
+  APPLY
+}
+
+enum SprintEvaluationRunStatus {
+  PENDING
+  QUEUED
+  RUNNING
+  COMPLETED
+  PARTIAL
+  FAILED
+  CANCELLED
+  STALE
+  REJECTED
+}
+
+enum SprintEvaluationTrigger {
+  MANUAL
+  SCHEDULED_PERIODIC
+  SPRINT_START
+  DURING_SPRINT
+  SPRINT_END
+  RETRY
+  POST_SPRINT_RECONCILIATION
+}
+
+enum SprintLabelActionType {
+  ADD
+  REMOVE
+}
+
+enum SprintLabelActionStatus {
+  PLANNED
+  SKIPPED
+  APPLIED
+  FAILED
+  NO_OP
+  REJECTED
+}
+
 // ─── Team & People ───────────────────────────────────────────────────────────
 
 model Team {
@@ -89,11 +130,11 @@ model TeamMember {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  team      Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  workItems WorkItem[] @relation("Assignee")
-  reviews   WorkItem[] @relation("Reviewer")
-  qaOwnedWorkItems WorkItem[] @relation("QaOwner")
-  connectSessions Connect3030Session[]
+  team             Team                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  workItems        WorkItem[]           @relation("Assignee")
+  reviews          WorkItem[]           @relation("Reviewer")
+  qaOwnedWorkItems WorkItem[]           @relation("QaOwner")
+  connectSessions  Connect3030Session[]
 
   @@unique([teamId, email])
   @@index([teamId])
@@ -121,12 +162,12 @@ model GitLabProject {
 }
 
 model ProjectWorkflow {
-  id        String            @id @default(cuid())
-  projectId String            @unique
+  id        String   @id @default(cuid())
+  projectId String   @unique
   name      String
-  isDefault Boolean           @default(true)
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
+  isDefault Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   project GitLabProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   columns WorkflowColumn[]
@@ -153,17 +194,17 @@ model WorkflowColumn {
 // ─── Delivery ────────────────────────────────────────────────────────────────
 
 model Sprint {
-  id                String    @id @default(cuid())
+  id                String   @id @default(cuid())
   teamId            String
   projectId         String?
-  gitlabMilestoneId Int?      @unique
+  gitlabMilestoneId Int?     @unique
   name              String
   goal              String?
   startDate         DateTime
   endDate           DateTime
-  isActive          Boolean   @default(false)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  isActive          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   team      Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
   project   GitLabProject? @relation(fields: [projectId], references: [id])
@@ -217,37 +258,37 @@ model ReleaseEpic {
 // ─── Work Items (Issues, MRs) ────────────────────────────────────────────────
 
 model WorkItem {
-  id              String        @id @default(cuid())
-  projectId       String
-  sprintId        String?
-  columnId        String?
-  assigneeId      String?
-  reviewerId      String?
-  type            WorkItemType
-  state           WorkItemState @default(OPEN)
-  priority        Priority      @default(MEDIUM)
-  health          HealthStatus  @default(UNKNOWN)
-  gitlabIid       Int?
-  gitlabId        Int?          @unique
-  title           String
-  description     String?
-  labels          String[]      @default([])
-  milestoneId     Int?
-  milestoneTitle  String?
-  storyPoints     Int?
-  dueDate         DateTime?
-  blockedReason   String?
-  reviewStatus    String?
-  qaStatus        String?
-  lastActivityAt  DateTime?
-  parentEpicIid   Int?
-  timeSpentSeconds Int?
+  id                  String        @id @default(cuid())
+  projectId           String
+  sprintId            String?
+  columnId            String?
+  assigneeId          String?
+  reviewerId          String?
+  type                WorkItemType
+  state               WorkItemState @default(OPEN)
+  priority            Priority      @default(MEDIUM)
+  health              HealthStatus  @default(UNKNOWN)
+  gitlabIid           Int?
+  gitlabId            Int?          @unique
+  title               String
+  description         String?
+  labels              String[]      @default([])
+  milestoneId         Int?
+  milestoneTitle      String?
+  storyPoints         Int?
+  dueDate             DateTime?
+  blockedReason       String?
+  reviewStatus        String?
+  qaStatus            String?
+  lastActivityAt      DateTime?
+  parentEpicIid       Int?
+  timeSpentSeconds    Int?
   timeEstimateSeconds Int?
-  qaOwnerId         String?
-  syncSource      SyncSource    @default(MANUAL)
-  webUrl          String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  qaOwnerId           String?
+  syncSource          SyncSource    @default(MANUAL)
+  webUrl              String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
   project  GitLabProject   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   sprint   Sprint?         @relation(fields: [sprintId], references: [id])
@@ -282,15 +323,15 @@ model GovernanceRule {
 // ─── Sync & Jobs ─────────────────────────────────────────────────────────────
 
 model SyncRun {
-  id         String    @id @default(cuid())
+  id         String     @id @default(cuid())
   source     SyncSource
   entityType String
-  status     String    @default("pending")
-  startedAt  DateTime  @default(now())
+  status     String     @default("pending")
+  startedAt  DateTime   @default(now())
   finishedAt DateTime?
-  itemsCount Int       @default(0)
+  itemsCount Int        @default(0)
   error      String?
-  metadata   Json      @default("{}")
+  metadata   Json       @default("{}")
 
   @@index([source, entityType])
   @@index([startedAt])
@@ -365,4 +406,172 @@ model Connect3030Session {
   @@unique([memberId, monthKey])
   @@index([monthKey])
   @@index([memberId])
+}
+
+// ─── Sprint Intelligence ─────────────────────────────────────────────────────
+
+model SprintEvaluationRun {
+  id                   String                    @id @default(cuid())
+  runKey               String                    @unique
+  correlationId        String
+  mode                 SprintEvaluationRunMode
+  status               SprintEvaluationRunStatus @default(PENDING)
+  triggerType          SprintEvaluationTrigger   @default(MANUAL)
+  projectIds           Int[]
+  milestoneId          Int
+  milestoneTitle       String
+  milestoneStartDate   String?
+  milestoneDueDate     String?
+  timezone             String                    @default("Asia/Kolkata")
+  ruleConfigSnapshot   Json                      @default("{}")
+  inputHash            String?
+  analysisHash         String?
+  sourceAnalysisRunId  String?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  requestedAt          DateTime                  @default(now())
+  requestedBy          String?
+  jobId                String?
+  dryRun               Boolean                   @default(true)
+  confirmationRequired Boolean                   @default(false)
+  summary              Json                      @default("{}")
+  metrics              Json                      @default("{}")
+  errorCode            String?
+  errorMessage         String?
+  automationVersion    String                    @default("1.0.0")
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+
+  sourceAnalysisRun SprintEvaluationRun?          @relation("ApplySourceAnalysis", fields: [sourceAnalysisRunId], references: [id])
+  applyRuns         SprintEvaluationRun[]         @relation("ApplySourceAnalysis")
+  issueEvaluations  SprintIssueEvaluation[]
+  labelActions      SprintLabelAction[]
+  ownershipRecords  SprintManagedLabelOwnership[] @relation("OwnershipSourceRun")
+
+  @@index([status])
+  @@index([mode])
+  @@index([milestoneId])
+  @@index([createdAt])
+  @@index([jobId])
+  @@index([sourceAnalysisRunId])
+  @@index([triggerType, milestoneId, status])
+}
+
+model SprintIssueEvaluation {
+  id                               String    @id @default(cuid())
+  runId                            String
+  projectId                        Int
+  issueId                          Int
+  issueIid                         Int
+  issueTitle                       String
+  milestoneId                      Int
+  milestoneTitle                   String
+  assignmentTimestamp              DateTime?
+  removalTimestamp                 DateTime?
+  completionTimestamp              DateTime?
+  planningStatus                   String
+  deliveryStatus                   String
+  workTypes                        String[]  @default([])
+  excludedFromCommitment           Boolean   @default(false)
+  completedWithinSprint            Boolean   @default(false)
+  existingLabels                   String[]  @default([])
+  recommendedLabelsToAdd           String[]  @default([])
+  recommendedManagedLabelsToRemove String[]  @default([])
+  reasonCodes                      String[]  @default([])
+  eventResolutionDetails           Json      @default("{}")
+  evaluationErrorCode              String?
+  evaluationErrorMessage           String?
+  createdAt                        DateTime  @default(now())
+
+  run          SprintEvaluationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  labelActions SprintLabelAction[]
+
+  @@unique([runId, projectId, issueIid])
+  @@index([runId])
+  @@index([projectId, issueIid])
+  @@index([milestoneId])
+  @@index([planningStatus])
+  @@index([deliveryStatus])
+}
+
+model SprintLabelAction {
+  id                   String                  @id @default(cuid())
+  runId                String
+  issueEvaluationId    String?
+  projectId            Int
+  issueIid             Int
+  label                String
+  action               SprintLabelActionType
+  status               SprintLabelActionStatus @default(PLANNED)
+  ownedBefore          Boolean                 @default(false)
+  ownedAfter           Boolean?
+  plannedAt            DateTime                @default(now())
+  attemptedAt          DateTime?
+  completedAt          DateTime?
+  gitlabResponseStatus Int?
+  errorCode            String?
+  errorMessage         String?
+  createdAt            DateTime                @default(now())
+
+  run             SprintEvaluationRun          @relation(fields: [runId], references: [id], onDelete: Cascade)
+  issueEvaluation SprintIssueEvaluation?       @relation(fields: [issueEvaluationId], references: [id], onDelete: SetNull)
+  ownership       SprintManagedLabelOwnership? @relation("OwnershipSourceAction")
+
+  @@index([runId])
+  @@index([projectId, issueIid])
+  @@index([status])
+  @@index([issueEvaluationId])
+}
+
+model SprintManagedLabelOwnership {
+  id                  String    @id @default(cuid())
+  projectId           Int
+  issueIid            Int
+  milestoneId         Int
+  label               String
+  ruleId              String?
+  sourceRunId         String?
+  sourceLabelActionId String?   @unique
+  isActive            Boolean   @default(true)
+  acquiredAt          DateTime  @default(now())
+  releasedAt          DateTime?
+  lastVerifiedAt      DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  sourceRun         SprintEvaluationRun? @relation("OwnershipSourceRun", fields: [sourceRunId], references: [id], onDelete: SetNull)
+  sourceLabelAction SprintLabelAction?   @relation("OwnershipSourceAction", fields: [sourceLabelActionId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, issueIid, milestoneId, label])
+  @@index([projectId, issueIid])
+  @@index([milestoneId])
+  @@index([label])
+  @@index([isActive])
+  @@index([projectId, issueIid, label, isActive])
+}
+
+model SprintIntelligenceProjectConfig {
+  id                            String   @id @default(cuid())
+  projectId                     Int      @unique
+  enabled                       Boolean?
+  dryRunOnly                    Boolean?
+  timezone                      String?
+  allowFirstDayAdditions        Boolean?
+  createMissingLabels           Boolean?
+  removeInvalidManagedLabels    Boolean?
+  supportExcludedFromCommitment Boolean?
+  hotfixExcludedFromCommitment  Boolean?
+  uatExcludedFromCommitment     Boolean?
+  allowTitleOnlyMilestoneMatch  Boolean?
+  maxConcurrency                Int?
+  maxPages                      Int?
+  maxAnalysisAgeMinutes         Int?
+  scheduleEnabled               Boolean?
+  duringSprintIntervalMinutes   Int?
+  ruleConfigOverrides           Json     @default("{}")
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([enabled])
 }

@@ -49,13 +49,21 @@ export interface GitLabIssue {
   description: string | null;
   state: "opened" | "closed";
   labels: string[];
-  milestone: { id: number; title: string } | null;
+  milestone: {
+    id: number;
+    title: string;
+    start_date?: string | null;
+    due_date?: string | null;
+  } | null;
+  author?: GitLabUser;
   assignee: GitLabUser | null;
   assignees: GitLabUser[];
   due_date: string | null;
   web_url: string;
   updated_at: string;
   created_at: string;
+  /** Present when the issue is closed; null/omitted when open or reopened. */
+  closed_at?: string | null;
   weight: number | null;
 }
 
@@ -156,6 +164,88 @@ export interface GitLabLabel {
   name: string;
   color: string;
   description: string | null;
+}
+
+export interface GitLabPaginationOptions {
+  maxPages?: number;
+  perPage?: number;
+}
+
+export interface CreateGitLabLabelInput {
+  name: string;
+  color: string;
+  description?: string;
+}
+
+export interface EnsureGitLabLabelInput {
+  name: string;
+  color: string;
+  description?: string;
+}
+
+export interface EnsureLabelOptions {
+  /** When false, missing labels are reported but not created. Default true. */
+  createMissingLabels?: boolean;
+}
+
+export interface EnsureLabelsResult {
+  existing: string[];
+  created: string[];
+  missing: string[];
+  failed: Array<{
+    label: string;
+    error: string;
+  }>;
+}
+
+/** Normalized resource milestone event (provider boundary, camelCase). */
+export interface GitLabResourceMilestoneEvent {
+  id: number;
+  action: "add" | "remove";
+  createdAt: string;
+  milestone: {
+    id: number;
+    iid?: number;
+    title: string;
+    startDate?: string | null;
+    dueDate?: string | null;
+  } | null;
+  user?: {
+    id: number;
+    username?: string;
+    name?: string;
+  } | null;
+}
+
+/** Raw GitLab API snake_case resource milestone event. */
+export interface GitLabResourceMilestoneEventRaw {
+  id: number;
+  action: string;
+  created_at: string;
+  milestone?: {
+    id: number;
+    iid?: number;
+    title?: string;
+    start_date?: string | null;
+    due_date?: string | null;
+  } | null;
+  user?: {
+    id: number;
+    username?: string;
+    name?: string;
+  } | null;
+}
+
+export interface GitLabIssueLabelMutation {
+  labelsToAdd: string[];
+  labelsToRemove: string[];
+}
+
+export interface GitLabProviderResilienceOptions {
+  requestTimeoutMs?: number;
+  retryCount?: number;
+  retryBaseDelayMs?: number;
+  retryMaxDelayMs?: number;
 }
 
 export interface GitLabIssueLink {

@@ -14,6 +14,8 @@ export const NAV_ITEMS = [
     items: [
       { title: "Product Backlog", href: "/product-backlog", icon: "ClipboardList" },
       { title: "Sprint Planning", href: "/sprints", icon: "KanbanSquare" },
+      { title: "Sprint Response", href: "/sprints/response", icon: "MessageSquareWarning" },
+      { title: "Sprint Intelligence", href: "/sprints/intelligence", icon: "Gauge" },
       { title: "FY Planning", href: "/planning", icon: "CalendarRange" },
       { title: "Roadmap Maintenance", href: "/roadmap", icon: "Map" },
       { title: "Phoenix KPI", href: "/kpi/phoenix", icon: "BarChart3" },

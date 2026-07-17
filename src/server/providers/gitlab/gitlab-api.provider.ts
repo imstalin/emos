@@ -1,9 +1,14 @@
 import type {
+  CreateGitLabLabelInput,
+  EnsureGitLabLabelInput,
+  EnsureLabelOptions,
+  EnsureLabelsResult,
   GitLabConnectionTest,
   GitLabCreateIssuePayload,
   GitLabEpic,
   GitLabGroup,
   GitLabIssue,
+  GitLabIssueLabelMutation,
   GitLabIssueLink,
   GitLabIssueTimeStats,
   GitLabJob,
@@ -13,8 +18,12 @@ import type {
   GitLabCreateMilestonePayload,
   GitLabUpdateMilestonePayload,
   GitLabNote,
+  GitLabPaginationOptions,
   GitLabPipeline,
   GitLabProject,
+  GitLabProviderResilienceOptions,
+  GitLabResourceMilestoneEvent,
+  GitLabResourceMilestoneEventRaw,
   GitLabTag,
   GitLabCommit,
   GitLabUpdateIssuePayload,
@@ -24,12 +33,36 @@ import type {
 import type { GitLabConfig } from "@/lib/gitlab-config";
 import { logger } from "@/lib/logger";
 import type { GitLabProvider } from "@/server/providers/gitlab/gitlab-provider";
+import { mapResourceMilestoneEvents } from "@/server/providers/gitlab/gitlab-resource-milestone-events";
+import {
+  DEFAULT_GITLAB_RESILIENCE,
+  encodeGitLabProjectId,
+  executeGitLabRequest,
+  type GitLabResilienceConfig,
+  isLabelAlreadyExistsError,
+} from "@/server/providers/gitlab/gitlab-request";
 
 const PER_PAGE = 100;
-const REQUEST_TIMEOUT_MS = 25_000;
 
 export class GitLabApiProvider implements GitLabProvider {
-  constructor(private readonly config: GitLabConfig) {}
+  private readonly resilience: GitLabResilienceConfig;
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(
+    private readonly config: GitLabConfig,
+    options?: GitLabProviderResilienceOptions & { fetchImpl?: typeof fetch },
+  ) {
+    this.resilience = {
+      requestTimeoutMs:
+        options?.requestTimeoutMs ?? DEFAULT_GITLAB_RESILIENCE.requestTimeoutMs,
+      retryCount: options?.retryCount ?? DEFAULT_GITLAB_RESILIENCE.retryCount,
+      retryBaseDelayMs:
+        options?.retryBaseDelayMs ?? DEFAULT_GITLAB_RESILIENCE.retryBaseDelayMs,
+      retryMaxDelayMs:
+        options?.retryMaxDelayMs ?? DEFAULT_GITLAB_RESILIENCE.retryMaxDelayMs,
+    };
+    this.fetchImpl = options?.fetchImpl ?? fetch;
+  }
 
   async testConnection(): Promise<GitLabConnectionTest> {
     try {
@@ -195,9 +228,19 @@ export class GitLabApiProvider implements GitLabProvider {
   }
 
   async listProjectIssues(
-    projectId: number,
+    projectId: number | string,
     state: "opened" | "closed" | "all" = "all",
-    options?: { updatedAfter?: string; maxPages?: number },
+    options?: {
+      updatedAfter?: string;
+      maxPages?: number;
+      /** Milestone title filter. Mutually exclusive with milestoneTimebox. */
+      milestone?: string;
+      /**
+       * List-issues `milestone_id` accepts only Any/None/Upcoming/Started.
+       * Numeric milestone IDs are rejected by GitLab on this endpoint.
+       */
+      milestoneTimebox?: "Any" | "None" | "Upcoming" | "Started";
+    },
   ): Promise<GitLabIssue[]> {
     const params: Record<string, string> = {
       state,
@@ -207,16 +250,48 @@ export class GitLabApiProvider implements GitLabProvider {
     if (options?.updatedAfter) {
       params.updated_after = options.updatedAfter;
     }
+    // GitLab: milestone (title) and milestone_id (timebox) are mutually exclusive.
+    if (options?.milestone) {
+      params.milestone = options.milestone;
+    } else if (options?.milestoneTimebox) {
+      params.milestone_id = options.milestoneTimebox;
+    }
     return this.fetchPaginated<GitLabIssue>(
-      `/projects/${projectId}/issues`,
+      `/projects/${encodeGitLabProjectId(projectId)}/issues`,
       params,
       options?.maxPages,
     );
   }
 
-  async getIssue(projectId: number, issueIid: number): Promise<GitLabIssue> {
+  async listGroupIssues(
+    groupId: string | number,
+    options?: {
+      state?: "opened" | "closed" | "all";
+      milestone?: string;
+      maxPages?: number;
+    },
+  ): Promise<GitLabIssue[]> {
+    const params: Record<string, string> = {
+      state: options?.state ?? "all",
+      order_by: "updated_at",
+      sort: "desc",
+    };
+    if (options?.milestone) {
+      params.milestone = options.milestone;
+    }
+    return this.fetchPaginated<GitLabIssue>(
+      `/groups/${encodeURIComponent(String(groupId))}/issues`,
+      params,
+      options?.maxPages,
+    );
+  }
+
+  async getIssue(
+    projectId: number | string,
+    issueIid: number,
+  ): Promise<GitLabIssue> {
     return this.fetch<GitLabIssue>(
-      `/projects/${projectId}/issues/${issueIid}`,
+      `/projects/${encodeGitLabProjectId(projectId)}/issues/${issueIid}`,
     );
   }
 
@@ -269,13 +344,14 @@ export class GitLabApiProvider implements GitLabProvider {
   }
 
   async updateIssue(
-    projectId: number,
+    projectId: number | string,
     issueIid: number,
     payload: GitLabUpdateIssuePayload,
   ): Promise<GitLabIssue> {
     return this.putForm<GitLabIssue>(
-      `/projects/${projectId}/issues/${issueIid}`,
+      `/projects/${encodeGitLabProjectId(projectId)}/issues/${issueIid}`,
       this.buildUpdateParams(payload),
+      true,
     );
   }
 
@@ -290,11 +366,127 @@ export class GitLabApiProvider implements GitLabProvider {
     );
   }
 
-  async listProjectLabels(projectId: number): Promise<GitLabLabel[]> {
+  async listProjectLabels(
+    projectId: number | string,
+    options?: GitLabPaginationOptions,
+  ): Promise<GitLabLabel[]> {
     return this.fetchPaginated<GitLabLabel>(
-      `/projects/${projectId}/labels`,
+      `/projects/${encodeGitLabProjectId(projectId)}/labels`,
       { with_counts: "false" },
+      options?.maxPages,
+      options?.perPage,
     );
+  }
+
+  async createProjectLabel(
+    projectId: number | string,
+    input: CreateGitLabLabelInput,
+  ): Promise<GitLabLabel> {
+    return this.postForm<GitLabLabel>(
+      `/projects/${encodeGitLabProjectId(projectId)}/labels`,
+      {
+        name: input.name,
+        color: input.color,
+        ...(input.description ? { description: input.description } : {}),
+      },
+      false,
+    );
+  }
+
+  async ensureProjectLabels(
+    projectId: number | string,
+    labels: EnsureGitLabLabelInput[],
+    options?: EnsureLabelOptions,
+  ): Promise<EnsureLabelsResult> {
+    const createMissing = options?.createMissingLabels !== false;
+    const existingLabels = await this.listProjectLabels(projectId);
+    const existingNames = new Set(existingLabels.map((label) => label.name));
+
+    const result: EnsureLabelsResult = {
+      existing: [],
+      created: [],
+      missing: [],
+      failed: [],
+    };
+
+    for (const label of labels) {
+      if (existingNames.has(label.name)) {
+        result.existing.push(label.name);
+        continue;
+      }
+
+      result.missing.push(label.name);
+      if (!createMissing) {
+        continue;
+      }
+
+      try {
+        await this.createProjectLabel(projectId, label);
+        result.created.push(label.name);
+        existingNames.add(label.name);
+        logger.info("sprint-intelligence.gitlab.label.created", {
+          projectId,
+          label: label.name,
+        });
+      } catch (error) {
+        if (isLabelAlreadyExistsError(error)) {
+          const refreshed = await this.listProjectLabels(projectId);
+          if (refreshed.some((item) => item.name === label.name)) {
+            result.created.push(label.name);
+            existingNames.add(label.name);
+            continue;
+          }
+        }
+        result.failed.push({
+          label: label.name,
+          error: error instanceof Error ? error.message : "Label create failed",
+        });
+      }
+    }
+
+    return result;
+  }
+
+  async listIssueResourceMilestoneEvents(
+    projectId: number | string,
+    issueIid: number,
+    options?: GitLabPaginationOptions,
+  ): Promise<GitLabResourceMilestoneEvent[]> {
+    const raw = await this.fetchPaginated<GitLabResourceMilestoneEventRaw>(
+      `/projects/${encodeGitLabProjectId(projectId)}/issues/${issueIid}/resource_milestone_events`,
+      {},
+      options?.maxPages,
+      options?.perPage,
+    );
+    return mapResourceMilestoneEvents(raw);
+  }
+
+  async updateIssueLabels(
+    projectId: number | string,
+    issueIid: number,
+    mutation: GitLabIssueLabelMutation,
+  ): Promise<GitLabIssue | null> {
+    const labelsToAdd = uniqueLabels(mutation.labelsToAdd);
+    const labelsToRemove = uniqueLabels(mutation.labelsToRemove);
+
+    if (labelsToAdd.length === 0 && labelsToRemove.length === 0) {
+      return null;
+    }
+
+    const updated = await this.updateIssue(projectId, issueIid, {
+      add_labels: labelsToAdd.length > 0 ? labelsToAdd.join(",") : undefined,
+      remove_labels:
+        labelsToRemove.length > 0 ? labelsToRemove.join(",") : undefined,
+    });
+
+    logger.info("sprint-intelligence.gitlab.issue.updated", {
+      projectId,
+      issueIid,
+      added: labelsToAdd,
+      removed: labelsToRemove,
+    });
+
+    return updated;
   }
 
   async listIssueLinks(
@@ -510,30 +702,24 @@ export class GitLabApiProvider implements GitLabProvider {
   private async postForm<T>(
     path: string,
     fields: Record<string, string>,
+    idempotent = false,
   ): Promise<T> {
     const body = new URLSearchParams();
     for (const [key, value] of Object.entries(fields)) {
       body.set(key, value);
     }
 
-    const response = await fetch(`${this.config.baseUrl}/api/v4${path}`, {
+    const response = await executeGitLabRequest({
+      baseUrl: this.config.baseUrl,
+      token: this.config.token,
+      path,
       method: "POST",
-      headers: {
-        "PRIVATE-TOKEN": this.config.token,
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
       body: body.toString(),
-      cache: "no-store",
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      contentType: "application/x-www-form-urlencoded",
+      idempotent,
+      resilience: this.resilience,
+      fetchImpl: this.fetchImpl,
     });
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(
-        `GitLab API ${response.status} ${response.statusText}: ${text.slice(0, 200)}`,
-      );
-    }
 
     return response.json() as Promise<T>;
   }
@@ -541,29 +727,24 @@ export class GitLabApiProvider implements GitLabProvider {
   private async putForm<T>(
     path: string,
     fields: Array<[string, string]>,
+    idempotent = false,
   ): Promise<T> {
     const body = new URLSearchParams();
     for (const [key, value] of fields) {
       body.append(key, value);
     }
 
-    const response = await fetch(`${this.config.baseUrl}/api/v4${path}`, {
+    const response = await executeGitLabRequest({
+      baseUrl: this.config.baseUrl,
+      token: this.config.token,
+      path,
       method: "PUT",
-      headers: {
-        "PRIVATE-TOKEN": this.config.token,
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
       body: body.toString(),
-      cache: "no-store",
+      contentType: "application/x-www-form-urlencoded",
+      idempotent,
+      resilience: this.resilience,
+      fetchImpl: this.fetchImpl,
     });
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(
-        `GitLab API ${response.status} ${response.statusText}: ${text.slice(0, 200)}`,
-      );
-    }
 
     return response.json() as Promise<T>;
   }
@@ -572,26 +753,52 @@ export class GitLabApiProvider implements GitLabProvider {
     path: string,
     params: Record<string, string> = {},
     maxPages?: number,
+    perPage = PER_PAGE,
   ): Promise<T[]> {
     const results: T[] = [];
     let page = 1;
+    const pageSize = perPage > 0 ? perPage : PER_PAGE;
+    const seenPages = new Set<number>();
 
     while (true) {
+      if (seenPages.has(page)) {
+        break;
+      }
+      seenPages.add(page);
+
       const response = await this.request(path, {
         ...params,
-        per_page: String(PER_PAGE),
+        per_page: String(pageSize),
         page: String(page),
       });
 
       const batch = (await response.json()) as T[];
       results.push(...batch);
 
-      const totalPages = Number(response.headers.get("x-total-pages") ?? "1");
-      if (
-        page >= totalPages ||
-        batch.length < PER_PAGE ||
-        (maxPages != null && page >= maxPages)
-      ) {
+      if (maxPages != null && page >= maxPages) {
+        break;
+      }
+
+      const nextPageHeader = response.headers.get("x-next-page")?.trim();
+      if (nextPageHeader) {
+        const nextPage = Number(nextPageHeader);
+        if (!Number.isFinite(nextPage) || nextPage <= page) {
+          break;
+        }
+        page = nextPage;
+        continue;
+      }
+
+      const totalPages = Number(response.headers.get("x-total-pages") ?? "0");
+      if (Number.isFinite(totalPages) && totalPages > 0) {
+        if (page >= totalPages || batch.length < pageSize) {
+          break;
+        }
+        page += 1;
+        continue;
+      }
+
+      if (batch.length < pageSize) {
         break;
       }
       page += 1;
@@ -617,34 +824,26 @@ export class GitLabApiProvider implements GitLabProvider {
     params: Record<string, string> = {},
     method: "GET" | "POST" = "GET",
   ): Promise<Response> {
-    const url = new URL(`${this.config.baseUrl}/api/v4${path}`);
-    for (const [key, value] of Object.entries(params)) {
-      url.searchParams.set(key, value);
-    }
-
-    const response = await fetch(url.toString(), {
+    return executeGitLabRequest({
+      baseUrl: this.config.baseUrl,
+      token: this.config.token,
+      path,
       method,
-      headers: {
-        "PRIVATE-TOKEN": this.config.token,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      params,
+      idempotent: method === "GET",
+      resilience: this.resilience,
+      fetchImpl: this.fetchImpl,
     });
-
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(
-        `GitLab API ${response.status} ${response.statusText}: ${body.slice(0, 200)}`,
-      );
-    }
-
-    return response;
   }
+}
+
+function uniqueLabels(labels: string[]): string[] {
+  return [...new Set(labels.map((label) => label.trim()).filter(Boolean))];
 }
 
 export function createGitLabProvider(
   config: GitLabConfig,
+  options?: GitLabProviderResilienceOptions & { fetchImpl?: typeof fetch },
 ): GitLabProvider {
-  return new GitLabApiProvider(config);
+  return new GitLabApiProvider(config, options);
 }
