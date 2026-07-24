@@ -519,7 +519,6 @@ export class SprintIntelligenceExecutionService {
     const rebuilt = rebuildAnalysisResultFromPersistence(
       source,
       evaluations,
-      plannedActions,
     );
     const recalculatedHash = hashSprintAnalysisResult(rebuilt);
     if (recalculatedHash !== source.analysisHash) {
@@ -800,30 +799,22 @@ function rebuildAnalysisResultFromPersistence(
   evaluations: Awaited<
     ReturnType<typeof sprintIssueEvaluationRepository.listByRun>
   >,
-  actions: SprintLabelAction[],
 ): Pick<
   SprintMilestoneAnalysisResult,
   "milestone" | "managedLabels" | "metrics" | "evaluations" | "labelPlans" | "summary"
 > {
   const ruleConfig =
     source.ruleConfigSnapshot as unknown as SprintIntelligenceRuleConfig;
-  const labelPlansMap = new Map<
-    string,
-    { projectId: number; issueIid: number; labelsToAdd: string[]; labelsToRemove: string[] }
-  >();
 
-  for (const action of actions) {
-    const key = `${action.projectId}:${action.issueIid}`;
-    const plan = labelPlansMap.get(key) ?? {
-      projectId: action.projectId,
-      issueIid: action.issueIid,
-      labelsToAdd: [],
-      labelsToRemove: [],
-    };
-    if (action.action === "ADD") plan.labelsToAdd.push(action.label);
-    if (action.action === "REMOVE") plan.labelsToRemove.push(action.label);
-    labelPlansMap.set(key, plan);
-  }
+  // Must match analyzeMilestone: one label plan per evaluation (including empty
+  // add/remove lists). Rebuilding from actions alone drops empty plans and
+  // causes HASH_MISMATCH on apply.
+  const labelPlans = evaluations.map((evaluation) => ({
+    projectId: evaluation.projectId,
+    issueIid: evaluation.issueIid,
+    labelsToAdd: evaluation.recommendedLabelsToAdd,
+    labelsToRemove: evaluation.recommendedManagedLabelsToRemove,
+  }));
 
   return {
     milestone: {
@@ -836,7 +827,7 @@ function rebuildAnalysisResultFromPersistence(
     metrics: source.metrics as unknown as SprintMilestoneAnalysisResult["metrics"],
     summary:
       source.summary as unknown as SprintMilestoneAnalysisResult["summary"],
-    labelPlans: [...labelPlansMap.values()],
+    labelPlans,
     evaluations: evaluations.map((evaluation) => ({
       projectId: evaluation.projectId,
       issueId: evaluation.issueId,

@@ -187,4 +187,44 @@ describe("sprint-intelligence hashing", () => {
     expect(b.startsWith(`${base}:attempt:`)).toBe(true);
     expect(a).not.toBe(b);
   });
+
+  it("includes empty label plans so apply rebuild matches analyze", () => {
+    const withEmptyPlans = hashSprintAnalysisResult({
+      milestone,
+      managedLabels: DEFAULT_SPRINT_INTELLIGENCE_CONFIG.managedLabels,
+      metrics: { plannedCount: 2 } as never,
+      summary: { issuesEvaluated: 2 } as never,
+      labelPlans: [
+        {
+          projectId: 1,
+          issueIid: 1,
+          labelsToAdd: ["sprint::planned"],
+          labelsToRemove: [],
+        },
+        {
+          projectId: 1,
+          issueIid: 2,
+          labelsToAdd: [],
+          labelsToRemove: [],
+        },
+      ],
+      evaluations: [],
+    });
+    const actionsOnly = hashSprintAnalysisResult({
+      milestone,
+      managedLabels: DEFAULT_SPRINT_INTELLIGENCE_CONFIG.managedLabels,
+      metrics: { plannedCount: 2 } as never,
+      summary: { issuesEvaluated: 2 } as never,
+      labelPlans: [
+        {
+          projectId: 1,
+          issueIid: 1,
+          labelsToAdd: ["sprint::planned"],
+          labelsToRemove: [],
+        },
+      ],
+      evaluations: [],
+    });
+    expect(withEmptyPlans).not.toBe(actionsOnly);
+  });
 });
