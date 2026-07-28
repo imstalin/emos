@@ -2,7 +2,6 @@ import type { GitLabActivityItem } from "@/domain/types/gitlab-activity";
 import { ExternalLink } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   formatRelativeDate,
   getHealthClass,
@@ -27,7 +26,11 @@ export function GitLabActivityTable({ items }: GitLabActivityTableProps) {
   }
 
   return (
-    <ScrollArea className="max-h-[calc(100vh-28rem)]">
+    <div
+      className="max-h-[min(40rem,70dvh)] overflow-y-auto overscroll-contain"
+      role="region"
+      aria-label="Work items"
+    >
       <ul className="divide-y">
         {items.map((item) => (
           <li
@@ -118,6 +121,6 @@ export function GitLabActivityTable({ items }: GitLabActivityTableProps) {
           </li>
         ))}
       </ul>
-    </ScrollArea>
+    </div>
   );
 }

@@ -20,8 +20,10 @@ import {
   type RoadmapData,
   type RoadmapItem,
 } from "@/domain/types/roadmap";
+import type { RoadmapGitLabIssuePreview } from "@/domain/types/roadmap-gitlab";
 import { RoadmapFilters } from "@/features/roadmap/components/roadmap-filters";
 import { RoadmapForm } from "@/features/roadmap/components/roadmap-form";
+import { RoadmapGitLabConfirmModal } from "@/features/roadmap/components/roadmap-gitlab-confirm-modal";
 import { RoadmapMantineProvider } from "@/features/roadmap/components/roadmap-mantine-provider";
 import { RoadmapSummaryCards } from "@/features/roadmap/components/roadmap-summary-cards";
 import { RoadmapTable } from "@/features/roadmap/components/roadmap-table";
@@ -56,6 +58,14 @@ function RoadmapViewContent({ initialData }: RoadmapViewProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [aiItemId, setAiItemId] = useState<string | null>(null);
+  const [gitlabItemId, setGitlabItemId] = useState<string | null>(null);
+  const [gitlabPreviewOpen, setGitlabPreviewOpen] = useState(false);
+  const [gitlabPreviewLoading, setGitlabPreviewLoading] = useState(false);
+  const [gitlabCreating, setGitlabCreating] = useState(false);
+  const [gitlabPreview, setGitlabPreview] = useState<RoadmapGitLabIssuePreview | null>(
+    null,
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const filterOptions = useMemo(() => collectFilterOptions(items), [items]);
@@ -141,6 +151,142 @@ function RoadmapViewContent({ initialData }: RoadmapViewProps) {
       applyRoadmapData(data);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to delete roadmap item");
+    }
+  }
+
+  async function handleSaveFields(
+    item: RoadmapItem,
+    patch: { title: string; description: string },
+  ) {
+    setErrorMessage(null);
+    try {
+      await handleSave({ ...item, ...patch });
+    } catch {
+      // errorMessage already set by handleSave
+    }
+  }
+
+  async function handleAiGenerate(item: RoadmapItem) {
+    if (!item.title.trim()) {
+      setErrorMessage("Add a title before generating a description");
+      return;
+    }
+
+    setAiItemId(item.id);
+    setErrorMessage(null);
+
+    try {
+      const response = await fetch("/api/roadmap/ai/description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "generate",
+          title: item.title,
+          description: item.description,
+          project: item.project,
+          category: item.category,
+          priority: item.priority,
+          quarter: item.quarter,
+          assignee: item.assignee,
+        }),
+      });
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error ?? "AI request failed");
+      }
+
+      const data = (await response.json()) as { description: string };
+      await handleSave({ ...item, description: data.description });
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "AI request failed");
+    } finally {
+      setAiItemId(null);
+    }
+  }
+
+  async function handleCreateGitLab(item: RoadmapItem) {
+    if (!item.title.trim()) {
+      setErrorMessage("Add a title before creating a GitLab issue");
+      return;
+    }
+
+    setGitlabItemId(item.id);
+    setGitlabPreviewOpen(true);
+    setGitlabPreviewLoading(true);
+    setGitlabPreview(null);
+    setErrorMessage(null);
+
+    try {
+      const saved = await handleSave(item);
+      setGitlabItemId(saved.id);
+
+      const response = await fetch("/api/roadmap/gitlab/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(saved),
+      });
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error ?? "Failed to preview GitLab issue");
+      }
+
+      const data = (await response.json()) as {
+        preview?: RoadmapGitLabIssuePreview;
+      } & Partial<RoadmapGitLabIssuePreview>;
+
+      const preview = data.preview ?? (data.projectId ? (data as RoadmapGitLabIssuePreview) : null);
+      if (!preview) {
+        throw new Error("Preview response was empty");
+      }
+
+      setGitlabPreview(preview);
+    } catch (error) {
+      setGitlabPreviewOpen(false);
+      setGitlabItemId(null);
+      setErrorMessage(error instanceof Error ? error.message : "Preview failed");
+    } finally {
+      setGitlabPreviewLoading(false);
+    }
+  }
+
+  async function confirmGitLabCreate() {
+    if (!gitlabItemId || gitlabItemId === "new") {
+      setErrorMessage("Save the roadmap item before creating a GitLab issue");
+      return;
+    }
+
+    setGitlabCreating(true);
+    setErrorMessage(null);
+
+    try {
+      const response = await fetch("/api/roadmap/gitlab/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId: gitlabItemId, confirmed: true }),
+      });
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error ?? "Failed to create GitLab issue");
+      }
+
+      const data = (await response.json()) as {
+        item: RoadmapItem;
+        issue: { iid: number; webUrl: string; title: string };
+      };
+
+      setItems((current) =>
+        current.map((entry) => (entry.id === data.item.id ? data.item : entry)),
+      );
+      setGitlabPreviewOpen(false);
+      setGitlabPreview(null);
+      setGitlabItemId(null);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Create failed");
+    } finally {
+      setGitlabCreating(false);
     }
   }
 
@@ -260,7 +406,8 @@ function RoadmapViewContent({ initialData }: RoadmapViewProps) {
             <div>
               <Text fw={600}>Roadmap items</Text>
               <Text size="sm" c="dimmed">
-                Showing {filteredItems.length} of {items.length} items from {sourceSheet}
+                Showing {filteredItems.length} of {items.length} items · edit Title and
+                Description in-table · AI generate / Create GitLab per row · Sync hours above
               </Text>
             </div>
           </Group>
@@ -268,8 +415,13 @@ function RoadmapViewContent({ initialData }: RoadmapViewProps) {
           <RoadmapTable
             items={filteredItems}
             loading={isRefreshing || isImporting}
+            aiItemId={aiItemId}
+            gitlabItemId={gitlabItemId}
             onEdit={openEditForm}
             onDelete={(item) => void handleDelete(item)}
+            onSaveFields={handleSaveFields}
+            onAiGenerate={handleAiGenerate}
+            onCreateGitLab={(item) => void handleCreateGitLab(item)}
           />
         </Paper>
       </Stack>
@@ -286,6 +438,19 @@ function RoadmapViewContent({ initialData }: RoadmapViewProps) {
             current.map((entry) => (entry.id === linked.id ? linked : entry)),
           );
         }}
+      />
+
+      <RoadmapGitLabConfirmModal
+        opened={gitlabPreviewOpen}
+        preview={gitlabPreview}
+        loading={gitlabPreviewLoading}
+        creating={gitlabCreating}
+        onClose={() => {
+          setGitlabPreviewOpen(false);
+          setGitlabPreview(null);
+          setGitlabItemId(null);
+        }}
+        onConfirm={() => void confirmGitLabCreate()}
       />
     </>
   );

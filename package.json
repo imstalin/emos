@@ -17,7 +17,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "worker": "tsx src/server/workers/start.ts",
-    "dev:all": "concurrently -n web,worker -c blue,green \"npm run dev\" \"npm run worker\""
+    "dev:all": "concurrently -n web,worker -c blue,green \"npm run dev\" \"npm run worker\"",
+    "weekly-status": "tsx scripts/generate-weekly-status.ts",
+    "project-tracker": "python3 scripts/generate-fy27-project-tracker.py"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

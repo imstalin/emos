@@ -1,0 +1,138 @@
+Hi Roshni,
+This update provides a consolidated view of the current engineering progress, ongoing workstreams, key dependencies, and upcoming milestones. The objective is to maintain regular visibility, enable proactive discussions on any risks or dependencies, and ensure alignment on delivery priorities.
+Overall, the team has made steady progress across development, production support, migration activities, and implementation planning. The remaining items are being actively tracked, and the respective owners are working towards their planned target dates.
+Please find the detailed status in the table below.
+
+
+
+Workstream
+Team/Owner
+Status
+Completed This Week (17/07/2026) 
+Current Progress
+Risks / Dependencies
+Target Date
+Next Milestone
+Remarks
+Cash Rewards & Wallet – Development
+Core
+Completed
+Development & QA completed
+Available in Pre-Prod
+None
+17/07/2026
+Ready for UAT
+ 
+Cash Rewards & Wallet – UAT
+Core
+In Progress
+Test cases & reviews completed
+UAT in progress
+Resource availability
+23/07/2026
+Complete UAT
+ 
+Cash Rewards – Data Pipeline
+Data
+In Progress
+Integration started
+Working with Data Team
+Cross-team dependency
+23/07/2026
+Complete integration
+ 
+Cash Rewards – Architecture Review
+Core
+In Progress
+ 
+Architecture/code review in progress
+ 
+23/07/2026
+Close review
+ 
+Cash Rewards – Phase 2 (1.x Patch)
+Core + Delivery
+Not Started
+ 
+Integration & dependency analysis
+ 
+TBD
+Finalize implementation plan
+ 
+Core Product Regression Testing - June
+Core
+Completed
+ 
+ 
+ 
+17/07/2026
+ 
+ 
+Salesforce Connector
+Core
+In Progress
+Analysis & estimation complete
+Framework development
+Credentials pending
+TBD
+Development continuation 
+ 
+Release Observation Issues
+Core + Delivery
+In Progress
+ 
+Issue fixes in progress
+ 
+Ongoing
+Close priority issues
+ 
+GM BRIKS - Production Deployment
+Core + Delivery
+Completed
+Deployment completed
+Legacy shutdown initiated
+ 
+Ongoing
+Complete decommission
+ 
+BRIKS Production Issues & Support
+Core + Delivery
+Ongoing
+ 
+Monitoring & support
+ 
+ 24/07/2026
+Ongoing
+ 
+Nackle & Rewards Migration Activities
+Core + Delivery
+In Progress
+ 
+Supporting migration
+ 
+ TBD
+As per schedule
+ 
+Coupon Migration (DG & Tata Rishta)
+Core + Delivery
+Planned
+ 
+Migration planned
+Delivery schedule
+21-Jul-2026
+Support execution
+ 
+Insight Agent
+Core + Data
+In Progress
+POC completed
+Backedn API - Implementation started
+Mobile UI mockups pending
+24/07/2026
+Planning complete
+ 
+
+
+Additionally, two other items are pending to share with you.
+From BA Review - Transfer Failure Report work is started 
+Mobile demo is scheduled.

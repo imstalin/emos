@@ -10,6 +10,7 @@ const REQUIRED_MODELS = [
   "kpiSheetDocument",
   "planningDocument",
   "roadmapDocument",
+  "roadmapItem",
   "connect3030Session",
   "releaseEpic",
   "sprintEvaluationRun",

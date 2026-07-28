@@ -1,9 +1,11 @@
-import type { Prisma } from "@prisma/client";
+import type { Prisma, RoadmapItem as DbRoadmapItem } from "@prisma/client";
 
 import {
   DEFAULT_ROADMAP_SLUG,
   ROADMAP_SHEET_FY27_V1,
   type RoadmapData,
+  type RoadmapGitLabLink,
+  type RoadmapHours,
   type RoadmapItem,
 } from "@/domain/types/roadmap";
 import { buildRoadmapSummary } from "@/features/roadmap/lib/roadmap-utils";
@@ -16,24 +18,101 @@ const DOCUMENT_NAME = "FY27 Roadmap V1";
 
 let memoryDocument: RoadmapData | null = null;
 
-function itemsFromJson(value: Prisma.JsonValue): RoadmapItem[] {
-  if (!Array.isArray(value)) return [];
-  return value as RoadmapItem[];
+function parseHours(value: Prisma.JsonValue): RoadmapHours {
+  if (value === "TBD") return "TBD";
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().toUpperCase() === "TBD") return "TBD";
+  const asNumber = typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(asNumber) ? asNumber : "TBD";
 }
 
-function toRoadmapData(record: {
+function parseGitLab(value: Prisma.JsonValue | null | undefined): RoadmapGitLabLink | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record.projectId !== "number" ||
+    typeof record.issueIid !== "number" ||
+    typeof record.issueUrl !== "string" ||
+    typeof record.issueId !== "number"
+  ) {
+    return undefined;
+  }
+  return {
+    projectId: record.projectId,
+    issueIid: record.issueIid,
+    issueUrl: record.issueUrl,
+    issueId: record.issueId,
+    createdAt: typeof record.createdAt === "string" ? record.createdAt : new Date().toISOString(),
+  };
+}
+
+function rowToItem(row: DbRoadmapItem): RoadmapItem {
+  return {
+    id: row.id,
+    priority: row.priority as RoadmapItem["priority"],
+    include: row.include as RoadmapItem["include"],
+    project: row.project,
+    category: row.category,
+    quarter: row.quarter,
+    timeline: row.timeline,
+    assignee: row.assignee,
+    hours: parseHours(row.hours),
+    core: row.core,
+    mobile: row.mobile,
+    data: row.data,
+    title: row.title,
+    description: row.description,
+    gitlab: parseGitLab(row.gitlab),
+    hoursSpent: row.hoursSpent ?? undefined,
+  };
+}
+
+function itemsFromLegacyJson(value: Prisma.JsonValue): RoadmapItem[] {
+  if (!Array.isArray(value)) return [];
+  return value as unknown as RoadmapItem[];
+}
+
+function itemFieldData(item: RoadmapItem, position: number) {
+  return {
+    id: item.id || crypto.randomUUID(),
+    priority: item.priority,
+    include: item.include,
+    project: item.project,
+    category: item.category,
+    quarter: item.quarter,
+    timeline: item.timeline,
+    assignee: item.assignee,
+    hours: item.hours as unknown as Prisma.InputJsonValue,
+    core: item.core,
+    mobile: item.mobile,
+    data: item.data,
+    title: item.title,
+    description: item.description,
+    gitlab: (item.gitlab ?? null) as unknown as Prisma.InputJsonValue,
+    hoursSpent: item.hoursSpent ?? null,
+    position,
+  };
+}
+
+function itemCreateData(item: RoadmapItem, documentId: string, position: number) {
+  return {
+    ...itemFieldData(item, position),
+    documentId,
+  };
+}
+
+function toRoadmapData(args: {
   slug: string;
   sourceSheet: string;
-  items: Prisma.JsonValue;
+  items: RoadmapItem[];
   updatedAt: Date;
 }): RoadmapData {
-  const items = itemsFromJson(record.items);
   return {
-    slug: record.slug,
-    sourceSheet: record.sourceSheet,
-    items,
-    summary: buildRoadmapSummary(items),
-    generatedAt: record.updatedAt.toISOString(),
+    slug: args.slug,
+    sourceSheet: args.sourceSheet,
+    items: args.items,
+    summary: buildRoadmapSummary(args.items),
+    generatedAt: args.updatedAt.toISOString(),
   };
 }
 
@@ -75,6 +154,82 @@ function setMemoryDocument(items: RoadmapItem[]) {
   return memoryDocument;
 }
 
+async function ensureDocument(slug: string) {
+  const existing = await db.roadmapDocument.findUnique({
+    where: { slug },
+    include: { items: { orderBy: { position: "asc" } } },
+  });
+  if (existing) return existing;
+
+  const seedItems = await loadSeedItems();
+  const created = await db.roadmapDocument.create({
+    data: {
+      slug,
+      name: DOCUMENT_NAME,
+      fiscalYear: "FY27",
+      sourceSheet: ROADMAP_SHEET_FY27_V1,
+      itemsJson: [],
+      items: {
+        create: seedItems.map((item, index) => itemFieldData(item, index)),
+      },
+    },
+    include: { items: { orderBy: { position: "asc" } } },
+  });
+
+  return created;
+}
+
+async function migrateLegacyJsonIfNeeded(
+  document: Awaited<ReturnType<typeof ensureDocument>>,
+): Promise<Awaited<ReturnType<typeof ensureDocument>>> {
+  if (document.items.length > 0) {
+    return document;
+  }
+
+  const legacy = itemsFromLegacyJson(document.itemsJson);
+  if (legacy.length === 0) {
+    return document;
+  }
+
+  logger.info("Migrating roadmap JSON items into RoadmapItem rows", {
+    slug: document.slug,
+    count: legacy.length,
+  });
+
+  await db.$transaction([
+    db.roadmapItem.createMany({
+      data: legacy.map((item, index) =>
+        itemCreateData(
+          { ...item, id: item.id || crypto.randomUUID() },
+          document.id,
+          index,
+        ),
+      ),
+    }),
+    db.roadmapDocument.update({
+      where: { id: document.id },
+      data: { itemsJson: [] },
+    }),
+  ]);
+
+  return db.roadmapDocument.findUniqueOrThrow({
+    where: { id: document.id },
+    include: { items: { orderBy: { position: "asc" } } },
+  });
+}
+
+async function loadDocument(slug: string) {
+  const document = await ensureDocument(slug);
+  return migrateLegacyJsonIfNeeded(document);
+}
+
+function touchDocument(documentId: string) {
+  return db.roadmapDocument.update({
+    where: { id: documentId },
+    data: { updatedAt: new Date() },
+  });
+}
+
 export class RoadmapService {
   async getData(slug = DEFAULT_ROADMAP_SLUG): Promise<RoadmapData> {
     const connected = await checkDatabaseConnection();
@@ -84,23 +239,13 @@ export class RoadmapService {
     }
 
     try {
-      const existing = await db.roadmapDocument.findUnique({ where: { slug } });
-      if (existing) {
-        return toRoadmapData(existing);
-      }
-
-      const items = await loadSeedItems();
-      const created = await db.roadmapDocument.create({
-        data: {
-          slug,
-          name: DOCUMENT_NAME,
-          fiscalYear: "FY27",
-          sourceSheet: ROADMAP_SHEET_FY27_V1,
-          items: items as unknown as Prisma.InputJsonValue,
-        },
+      const document = await loadDocument(slug);
+      return toRoadmapData({
+        slug: document.slug,
+        sourceSheet: document.sourceSheet,
+        items: document.items.map(rowToItem),
+        updatedAt: document.updatedAt,
       });
-
-      return toRoadmapData(created);
     } catch (error) {
       logger.warn("Roadmap database unavailable, using in-memory store", { error });
       return getMemoryDocument();
@@ -123,15 +268,19 @@ export class RoadmapService {
     }
 
     try {
-      const document = await this.getData(slug);
-      const items = [item, ...document.items];
+      const document = await loadDocument(slug);
+      await db.$transaction([
+        db.roadmapItem.updateMany({
+          where: { documentId: document.id },
+          data: { position: { increment: 1 } },
+        }),
+        db.roadmapItem.create({
+          data: itemCreateData(item, document.id, 0),
+        }),
+        touchDocument(document.id),
+      ]);
 
-      const updated = await db.roadmapDocument.update({
-        where: { slug },
-        data: { items: items as unknown as Prisma.InputJsonValue },
-      });
-
-      return toRoadmapData(updated);
+      return this.getData(slug);
     } catch (error) {
       logger.warn("Roadmap create fell back to in-memory store", { error });
       const current = await getMemoryDocument();
@@ -157,21 +306,37 @@ export class RoadmapService {
     }
 
     try {
-      const document = await this.getData(slug);
-      const items = document.items.map((entry) =>
-        entry.id === id ? { ...input, id } : entry,
-      );
-
-      if (!items.some((entry) => entry.id === id)) {
+      const document = await loadDocument(slug);
+      const existing = document.items.find((entry) => entry.id === id);
+      if (!existing) {
         throw new Error(`Roadmap item not found: ${id}`);
       }
 
-      const updated = await db.roadmapDocument.update({
-        where: { slug },
-        data: { items: items as unknown as Prisma.InputJsonValue },
-      });
+      await db.$transaction([
+        db.roadmapItem.update({
+          where: { id },
+          data: {
+            priority: input.priority,
+            include: input.include,
+            project: input.project,
+            category: input.category,
+            quarter: input.quarter,
+            timeline: input.timeline,
+            assignee: input.assignee,
+            hours: input.hours as unknown as Prisma.InputJsonValue,
+            core: input.core,
+            mobile: input.mobile,
+            data: input.data,
+            title: input.title,
+            description: input.description,
+            gitlab: (input.gitlab ?? null) as unknown as Prisma.InputJsonValue,
+            hoursSpent: input.hoursSpent ?? null,
+          },
+        }),
+        touchDocument(document.id),
+      ]);
 
-      return toRoadmapData(updated);
+      return this.getData(slug);
     } catch (error) {
       if (error instanceof Error && error.message.includes("not found")) {
         throw error;
@@ -200,19 +365,17 @@ export class RoadmapService {
     }
 
     try {
-      const document = await this.getData(slug);
-      const items = document.items.filter((entry) => entry.id !== id);
-
-      if (items.length === document.items.length) {
+      const document = await loadDocument(slug);
+      if (!document.items.some((entry) => entry.id === id)) {
         throw new Error(`Roadmap item not found: ${id}`);
       }
 
-      const updated = await db.roadmapDocument.update({
-        where: { slug },
-        data: { items: items as unknown as Prisma.InputJsonValue },
-      });
+      await db.$transaction([
+        db.roadmapItem.delete({ where: { id } }),
+        touchDocument(document.id),
+      ]);
 
-      return toRoadmapData(updated);
+      return this.getData(slug);
     } catch (error) {
       if (error instanceof Error && error.message.includes("not found")) {
         throw error;
@@ -234,11 +397,30 @@ export class RoadmapService {
     }
 
     try {
-      const updated = await db.roadmapDocument.update({
-        where: { slug },
-        data: { items: items as unknown as Prisma.InputJsonValue },
-      });
-      return toRoadmapData(updated);
+      const document = await loadDocument(slug);
+
+      await db.$transaction([
+        db.roadmapItem.deleteMany({ where: { documentId: document.id } }),
+        db.roadmapItem.createMany({
+          data: items.map((item, index) =>
+            itemCreateData(
+              { ...item, id: item.id || crypto.randomUUID() },
+              document.id,
+              index,
+            ),
+          ),
+        }),
+        db.roadmapDocument.update({
+          where: { id: document.id },
+          data: {
+            itemsJson: [],
+            sourceSheet: ROADMAP_SHEET_FY27_V1,
+            updatedAt: new Date(),
+          },
+        }),
+      ]);
+
+      return this.getData(slug);
     } catch (error) {
       logger.warn("Roadmap replaceItems fell back to in-memory store", { error });
       return setMemoryDocument(items);
@@ -247,33 +429,7 @@ export class RoadmapService {
 
   async reimportFromWorkbook(slug = DEFAULT_ROADMAP_SLUG): Promise<RoadmapData> {
     const items = await loadSeedItems();
-
-    const connected = await checkDatabaseConnection();
-    if (!connected) {
-      return setMemoryDocument(items);
-    }
-
-    try {
-      const updated = await db.roadmapDocument.upsert({
-        where: { slug },
-        create: {
-          slug,
-          name: DOCUMENT_NAME,
-          fiscalYear: "FY27",
-          sourceSheet: ROADMAP_SHEET_FY27_V1,
-          items: items as unknown as Prisma.InputJsonValue,
-        },
-        update: {
-          sourceSheet: ROADMAP_SHEET_FY27_V1,
-          items: items as unknown as Prisma.InputJsonValue,
-        },
-      });
-
-      return toRoadmapData(updated);
-    } catch (error) {
-      logger.warn("Roadmap import fell back to in-memory store", { error });
-      return setMemoryDocument(items);
-    }
+    return this.replaceItems(items, slug);
   }
 }
 

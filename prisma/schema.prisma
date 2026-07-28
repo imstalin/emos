@@ -367,14 +367,45 @@ model PlanningDocument {
 }
 
 model RoadmapDocument {
+  id           String        @id @default(cuid())
+  slug         String        @unique
+  name         String
+  fiscalYear   String
+  sourceSheet  String        @default("FY27 V1")
+  /// Legacy JSON blob. Prefer `items` relation; kept for one-time migration.
+  itemsJson    Json          @default("[]") @map("items")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  items        RoadmapItem[]
+}
+
+model RoadmapItem {
   id          String   @id @default(cuid())
-  slug        String   @unique
-  name        String
-  fiscalYear  String
-  sourceSheet String   @default("FY27 V1")
-  items       Json
+  documentId  String
+  priority    String
+  include     String
+  project     String
+  category    String
+  quarter     String
+  timeline    String   @default("")
+  assignee    String   @default("")
+  /// number or "TBD"
+  hours       Json
+  core        Boolean  @default(false)
+  mobile      Boolean  @default(false)
+  data        Boolean  @default(false)
+  title       String
+  description String   @default("") @db.Text
+  gitlab      Json?
+  hoursSpent  Float?
+  position    Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  document RoadmapDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([documentId, position])
 }
 
 model KpiSheetDocument {

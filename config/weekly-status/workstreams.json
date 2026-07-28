@@ -1,0 +1,176 @@
+{
+  "recipientName": "Roshni",
+  "senderName": "Stalin",
+  "timezone": "Asia/Kolkata",
+  "intro": "This update provides a consolidated view of the current engineering progress, ongoing workstreams, key dependencies, and upcoming milestones. The objective is to maintain regular visibility, enable proactive discussions on any risks or dependencies, and ensure alignment on delivery priorities.",
+  "overallSummary": "Overall, the team continued progress across Cash Rewards / Wallet, production support, migration activities, and Insight Agent implementation. Remaining items are actively tracked, and owners are working towards their planned target dates.",
+  "includeSprintIntelligence": true,
+  "additionalItems": [
+    "From BA Review — Transfer Failure Report work is started.",
+    "Mobile demo is scheduled — confirm date/outcome."
+  ],
+  "asks": [
+    "Confirm UAT / Data Pipeline / Architecture Review outcomes against recent targets.",
+    "Confirm Coupon Migration execution status.",
+    "Confirm Insight Agent and BRIKS support revised target dates.",
+    "Confirm Mobile demo schedule/status and Transfer Failure Report next checkpoint."
+  ],
+  "workstreams": [
+    {
+      "id": "cash-rewards-dev",
+      "name": "Cash Rewards & Wallet – Development",
+      "owner": "Core",
+      "status": "Completed",
+      "completedThisWeek": "—",
+      "currentProgress": "Available in Pre-Prod; ready for UAT consumption",
+      "risks": "None",
+      "targetDate": "17/07/2026",
+      "nextMilestone": "Support UAT defects",
+      "remarks": "Closed last week"
+    },
+    {
+      "id": "cash-rewards-uat",
+      "name": "Cash Rewards & Wallet – UAT",
+      "owner": "Core",
+      "status": "In Progress",
+      "completedThisWeek": "UAT execution continued; defect triage ongoing",
+      "currentProgress": "UAT in progress",
+      "risks": "Resource availability",
+      "targetDate": "25/07/2026",
+      "nextMilestone": "Complete UAT sign-off",
+      "remarks": "Confirm if sign-off achieved"
+    },
+    {
+      "id": "cash-rewards-data-pipeline",
+      "name": "Cash Rewards – Data Pipeline",
+      "owner": "Data",
+      "status": "In Progress",
+      "completedThisWeek": "Integration follow-ups with Data Team",
+      "currentProgress": "Integration in progress",
+      "risks": "Cross-team dependency",
+      "targetDate": "25/07/2026",
+      "nextMilestone": "Complete integration",
+      "remarks": "Confirm revised ETA if slipped"
+    },
+    {
+      "id": "cash-rewards-architecture-review",
+      "name": "Cash Rewards – Architecture Review",
+      "owner": "Core",
+      "status": "In Progress",
+      "completedThisWeek": "Review comments being addressed",
+      "currentProgress": "Architecture/code review in progress",
+      "risks": "Reviewer bandwidth",
+      "targetDate": "25/07/2026",
+      "nextMilestone": "Close review",
+      "remarks": "Confirm closure status"
+    },
+    {
+      "id": "cash-rewards-phase-2",
+      "name": "Cash Rewards – Phase 2 (1.x Patch)",
+      "owner": "Core + Delivery",
+      "status": "Not Started",
+      "completedThisWeek": "—",
+      "currentProgress": "Integration & dependency analysis pending",
+      "risks": "Implementation plan not finalized",
+      "targetDate": "TBD",
+      "nextMilestone": "Finalize implementation plan",
+      "remarks": "Needs kickoff decision"
+    },
+    {
+      "id": "core-regression-june",
+      "name": "Core Product Regression Testing - June",
+      "owner": "Core",
+      "status": "Completed",
+      "completedThisWeek": "—",
+      "currentProgress": "Completed",
+      "risks": "None",
+      "targetDate": "17/07/2026",
+      "nextMilestone": "—",
+      "remarks": "Closed"
+    },
+    {
+      "id": "salesforce-connector",
+      "name": "Salesforce Connector",
+      "owner": "Core",
+      "status": "In Progress",
+      "completedThisWeek": "Framework development continued",
+      "currentProgress": "Framework development",
+      "risks": "Credentials pending",
+      "targetDate": "TBD",
+      "nextMilestone": "Development continuation",
+      "remarks": "Blocked items: credentials"
+    },
+    {
+      "id": "release-observation-issues",
+      "name": "Release Observation Issues",
+      "owner": "Core + Delivery",
+      "status": "In Progress",
+      "completedThisWeek": "Priority issue fixes progressed",
+      "currentProgress": "Issue fixes in progress",
+      "risks": "Ongoing intake",
+      "targetDate": "Ongoing",
+      "nextMilestone": "Close priority issues",
+      "remarks": "Rolling workstream"
+    },
+    {
+      "id": "gm-briks-deployment",
+      "name": "GM BRIKS - Production Deployment",
+      "owner": "Core + Delivery",
+      "status": "Completed",
+      "completedThisWeek": "Legacy shutdown follow-through",
+      "currentProgress": "Legacy shutdown initiated / in progress",
+      "risks": "Decommission dependencies",
+      "targetDate": "Ongoing",
+      "nextMilestone": "Complete decommission",
+      "remarks": "Deployment done earlier"
+    },
+    {
+      "id": "briks-prod-support",
+      "name": "BRIKS Production Issues & Support",
+      "owner": "Core + Delivery",
+      "status": "Ongoing",
+      "completedThisWeek": "Production monitoring & issue handling",
+      "currentProgress": "Monitoring & support",
+      "risks": "Production incidents",
+      "targetDate": "31/07/2026",
+      "nextMilestone": "Ongoing support cadence",
+      "remarks": "Confirm if any Sev-1/2 open"
+    },
+    {
+      "id": "nackle-rewards-migration",
+      "name": "Nackle & Rewards Migration Activities",
+      "owner": "Core + Delivery",
+      "status": "In Progress",
+      "completedThisWeek": "Migration support continued",
+      "currentProgress": "Supporting migration",
+      "risks": "Schedule from Delivery",
+      "targetDate": "TBD",
+      "nextMilestone": "As per schedule",
+      "remarks": "Align to Delivery calendar"
+    },
+    {
+      "id": "coupon-migration",
+      "name": "Coupon Migration (DG & Tata Rishta)",
+      "owner": "Core + Delivery",
+      "status": "Planned",
+      "completedThisWeek": "Migration window support (confirm execution)",
+      "currentProgress": "Migration planned / in flight",
+      "risks": "Delivery schedule",
+      "targetDate": "21/07/2026",
+      "nextMilestone": "Support execution / closeout",
+      "remarks": "Update: Done / Partial / Deferred"
+    },
+    {
+      "id": "insight-agent",
+      "name": "Insight Agent",
+      "owner": "Core + Data",
+      "status": "In Progress",
+      "completedThisWeek": "Backend API implementation progressed",
+      "currentProgress": "Backend API implementation in progress; POC complete",
+      "risks": "Mobile UI mockups pending",
+      "targetDate": "31/07/2026",
+      "nextMilestone": "Complete API MVP + planning closeout",
+      "remarks": "Confirm mockup ETA"
+    }
+  ]
+}
