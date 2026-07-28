@@ -7,6 +7,55 @@ services:
       - "6379:6379"
     volumes:
       - emos_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Next.js app — connects to Postgres on the host (localhost:5432)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: emos-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      RUNNING_IN_DOCKER: "1"
+      # Reach host Postgres from the container (Docker Desktop + Linux host-gateway)
+      REDIS_URL: redis://redis:6379
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # Background workers (GitLab sync, sprint intelligence)
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: emos-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      RUNNING_IN_DOCKER: "1"
+      SKIP_DB_PUSH: "1"
+      REDIS_URL: redis://redis:6379
+    command: ["npx", "tsx", "src/server/workers/start.ts"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
+      app:
+        condition: service_started
 
 volumes:
   emos_redis_data:

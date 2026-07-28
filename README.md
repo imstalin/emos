@@ -16,21 +16,49 @@ Personal productivity platform for engineering managers — delivery visibility,
 ### Prerequisites
 
 - Node.js 20.19+ recommended (works on 20.11 with Prisma 6)
-- Docker (for PostgreSQL and Redis)
+- Docker (app, worker, Redis)
+- PostgreSQL on the host (`localhost:5432`) — create a database named `emos`
 
-### Setup
+### Docker (recommended)
+
+Runs the Next.js app + worker in containers; Redis in Docker; **Postgres on your host**.
+
+```bash
+# Configure environment (use localhost in DATABASE_URL — Compose rewrites it for containers)
+cp .env.example .env
+# Edit DATABASE_URL to match your local Postgres user/password/db
+
+# Build and start app, worker, and Redis
+docker compose up -d --build
+
+# Optional: seed data (uses host Postgres via your .env)
+npm install
+npm run db:seed
+```
+
+Open [http://localhost:3000](http://localhost:3000)
+
+Containers reach host Postgres via `host.docker.internal`. Ensure Postgres accepts connections on `127.0.0.1:5432` (default on macOS Homebrew / Docker Desktop).
+
+```bash
+# Logs / stop
+docker compose logs -f app
+docker compose down
+```
+
+### Local Node setup
 
 ```bash
 # Install dependencies
 npm install
 
-# Start infrastructure
-docker compose up -d
+# Start Redis only
+docker compose up -d redis
 
 # Configure environment
 cp .env.example .env
 
-# Generate Prisma client and run migrations
+# Generate Prisma client and sync schema to host Postgres
 npm run db:generate
 npm run db:push
 npm run db:seed
