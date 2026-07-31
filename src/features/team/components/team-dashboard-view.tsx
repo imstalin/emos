@@ -46,7 +46,12 @@ export function TeamDashboardView({ data }: TeamDashboardViewProps) {
         title="Team Dashboard"
         description={`Dev + QA day 1 view · Updated ${formatRelativeDate(data.generatedAt)}`}
         actions={
-          <Button variant="outline" size="sm" render={<Link href="/sprints" />}>
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<Link href="/sprints" />}
+          >
             Sprint planning
           </Button>
         }

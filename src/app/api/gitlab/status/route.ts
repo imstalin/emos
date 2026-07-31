@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { formatApiError } from "@/lib/http";
+import { logger } from "@/lib/logger";
 import { gitlabSyncService } from "@/server/services/gitlab/gitlab-sync.service";
 
 export async function GET() {
@@ -13,10 +15,16 @@ export async function GET() {
     );
   }
 
-  const [status, connection] = await Promise.all([
-    gitlabSyncService.getStatus(),
-    gitlabSyncService.testConnection(),
-  ]);
+  try {
+    const [status, connection] = await Promise.all([
+      gitlabSyncService.getStatus(),
+      gitlabSyncService.testConnection(),
+    ]);
 
-  return NextResponse.json({ ...status, connection });
+    return NextResponse.json({ ...status, connection });
+  } catch (error) {
+    const message = formatApiError(error, "Failed to load GitLab status");
+    logger.error("GitLab status request failed", { error: message });
+    return NextResponse.json({ configured: true, error: message }, { status: 500 });
+  }
 }

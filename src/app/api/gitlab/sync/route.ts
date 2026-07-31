@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { formatApiError } from "@/lib/http";
+import { logger } from "@/lib/logger";
 import { gitlabSyncService } from "@/server/services/gitlab/gitlab-sync.service";
 
 export async function POST() {
@@ -12,11 +14,17 @@ export async function POST() {
     );
   }
 
-  const result = await gitlabSyncService.syncAll();
+  try {
+    const result = await gitlabSyncService.syncAll();
 
-  if (result.status === "failed") {
-    return NextResponse.json(result, { status: 500 });
+    if (result.status === "failed") {
+      return NextResponse.json(result, { status: 500 });
+    }
+
+    return NextResponse.json(result);
+  } catch (error) {
+    const message = formatApiError(error, "GitLab sync failed");
+    logger.error("GitLab sync request failed", { error: message });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  return NextResponse.json(result);
 }

@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/card";
 import type { GitLabStatus, SyncResult } from "@/domain/types/gitlab";
 import { formatRelativeDate } from "@/lib/formatters";
+import { readJsonResponse } from "@/lib/http";
 
 type GitLabStatusResponse = GitLabStatus & {
   connection?: {
@@ -36,21 +37,21 @@ type GitLabStatusResponse = GitLabStatus & {
 
 async function fetchStatus(): Promise<GitLabStatusResponse> {
   const response = await fetch("/api/gitlab/status");
+  const body = await readJsonResponse<GitLabStatusResponse>(response);
   if (!response.ok) {
-    const body = (await response.json()) as { error?: string };
     throw new Error(body.error ?? "Failed to load GitLab status");
   }
-  return response.json();
+  return body;
 }
 
 async function testConnection() {
   const response = await fetch("/api/gitlab/test", { method: "POST" });
-  return response.json();
+  return readJsonResponse(response);
 }
 
 async function runSync(): Promise<SyncResult> {
   const response = await fetch("/api/gitlab/sync", { method: "POST" });
-  const body = (await response.json()) as SyncResult & { error?: string };
+  const body = await readJsonResponse<SyncResult & { error?: string }>(response);
   if (!response.ok) {
     throw new Error(body.error ?? "Sync failed");
   }

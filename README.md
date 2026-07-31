@@ -21,31 +21,36 @@ Personal productivity platform for engineering managers — delivery visibility,
 
 ### Docker (recommended)
 
-Runs the Next.js app + worker in containers; Redis in Docker; **Postgres on your host**.
+Runs the Next.js app + worker in containers; Redis in Docker; **Postgres on your host** (`localhost:5432`).
+
+Keep `DATABASE_URL=...@localhost:5432/...` in `.env` — the container entrypoint rewrites it to `host.docker.internal` automatically.
 
 ```bash
-# Configure environment (use localhost in DATABASE_URL — Compose rewrites it for containers)
+# Configure environment
 cp .env.example .env
-# Edit DATABASE_URL to match your local Postgres user/password/db
+# Edit DATABASE_URL to match your local Postgres user/password/db (database name: emos)
 
-# Build and start app, worker, and Redis
-docker compose up -d --build
+# Ensure Postgres is running on the host and the emos database exists, then:
+docker compose up -d
 
-# Optional: seed data (uses host Postgres via your .env)
-npm install
-npm run db:seed
+# First boot installs deps inside the container (npm ci) — check logs:
+docker compose logs -f app
 ```
 
 Open [http://localhost:3000](http://localhost:3000)
 
-Containers reach host Postgres via `host.docker.internal`. Ensure Postgres accepts connections on `127.0.0.1:5432` (default on macOS Homebrew / Docker Desktop).
-
 ```bash
-# Logs / stop
-docker compose logs -f app
+# Optional seed (from host, using same .env / localhost Postgres)
+npm install && npm run db:seed
+
+# Stop
 docker compose down
+
+# Production image (optional, needs more disk):
+docker compose --profile prod up -d --build
 ```
 
+Containers reach host Postgres via `host.docker.internal` (Docker Desktop on macOS/Windows; Linux uses `host-gateway`).
 ### Local Node setup
 
 ```bash

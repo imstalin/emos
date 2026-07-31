@@ -10,6 +10,7 @@ import type {
 } from "@/domain/types/gitlab";
 import {
   getGitLabConfig,
+  getMonitoredGitLabProjectIds,
   getWebhookUrl,
   isMonitoredGitLabProject,
 } from "@/lib/gitlab-config";
@@ -57,9 +58,19 @@ export class GitLabSyncService {
   async getStatus(): Promise<GitLabStatus> {
     const config = getPublicConfig();
     const [lastSync, scheduler, monitoredProjects] = await Promise.all([
-      this.getLastSyncRun(),
+      this.getLastSyncRun().catch((error) => {
+        logger.warn("Failed to load last GitLab sync run", { error });
+        return null;
+      }),
       getGitLabSchedulerStatus(),
-      getMonitoredProjectLabels(),
+      getMonitoredProjectLabels().catch((error) => {
+        logger.warn("Failed to load monitored GitLab projects", { error });
+        const gitlabIds = getMonitoredGitLabProjectIdsFallback();
+        return gitlabIds.map((gitlabId) => ({
+          gitlabId,
+          name: `Project ${gitlabId}`,
+        }));
+      }),
     ]);
 
     return {
@@ -550,6 +561,10 @@ function getPublicConfig() {
   const config = getGitLabConfig();
   if (!config) return null;
   return { url: config.url, groupId: config.groupId };
+}
+
+function getMonitoredGitLabProjectIdsFallback(): number[] {
+  return getMonitoredGitLabProjectIds() ?? [];
 }
 
 export function createGitLabSyncService(): GitLabSyncService | null {

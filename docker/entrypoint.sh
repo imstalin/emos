@@ -9,18 +9,20 @@ if [ "${RUNNING_IN_DOCKER:-}" = "1" ]; then
       -e 's/@localhost:/@host.docker.internal:/g' \
       -e 's/@127\.0\.0\.1:/@host.docker.internal:/g')
     export DATABASE_URL
+    echo "DATABASE_URL host rewritten for Docker → host.docker.internal"
   fi
 
-  if [ -z "${REDIS_URL:-}" ] || printf '%s' "$REDIS_URL" | grep -Eq '@?localhost:|@?127\.0\.0\.1:'; then
+  if [ -z "${REDIS_URL:-}" ] || printf '%s' "$REDIS_URL" | grep -Eq 'localhost|127\.0\.0\.1'; then
     export REDIS_URL="redis://redis:6379"
+    echo "REDIS_URL → redis://redis:6379"
   fi
 fi
 
-if [ "${SKIP_DB_PUSH:-0}" != "1" ] && [ -n "${DATABASE_URL:-}" ]; then
-  echo "Syncing Prisma schema to database..."
+# Production image: sync schema before starting the server
+if [ "${SKIP_DB_PUSH:-0}" != "1" ] && [ -n "${DATABASE_URL:-}" ] && [ -f node_modules/.bin/prisma ]; then
+  echo "Syncing Prisma schema to host Postgres..."
   npx prisma db push --skip-generate || {
-    echo "Warning: prisma db push failed — is host Postgres reachable on port 5432?"
-    echo "On macOS/Windows use host.docker.internal; ensure Postgres listens on 0.0.0.0 or localhost."
+    echo "Warning: prisma db push failed — is Postgres running on the host at port 5432?"
   }
 fi
 

@@ -45,7 +45,12 @@ export function DashboardView({ metrics }: DashboardViewProps) {
         title="Dashboard"
         description={`Active sprint delivery · Updated ${formatRelativeDate(metrics.generatedAt)}`}
         actions={
-          <Button variant="outline" size="sm" render={<Link href="/sprints" />}>
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<Link href="/sprints" />}
+          >
             Sprint planning
           </Button>
         }
