@@ -268,6 +268,15 @@ export interface GitLabUpdateIssuePayload {
   weight?: number | null;
 }
 
+export interface GitLabUpdateEpicPayload {
+  title?: string;
+  description?: string;
+  labels?: string;
+  state_event?: "close" | "reopen";
+  start_date?: string | null;
+  due_date?: string | null;
+}
+
 export interface GitLabUpdateMergeRequestPayload {
   title?: string;
   description?: string;

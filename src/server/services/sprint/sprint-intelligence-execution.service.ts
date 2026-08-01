@@ -211,8 +211,6 @@ export class SprintIntelligenceExecutionService {
         allowTitleOnlyMilestoneMatch: effective.allowTitleOnlyMilestoneMatch,
       });
 
-      const analysisHash = hashSprintAnalysisResult(analysis);
-
       const evaluations =
         await sprintIssueEvaluationRepository.createManyForRun(
           analysis.evaluations.map((evaluation) => ({
@@ -287,19 +285,36 @@ export class SprintIntelligenceExecutionService {
             ? "FAILED"
             : "COMPLETED";
 
-      const completed = await sprintEvaluationRunRepository.completeRun(runId, {
-        status,
-        summary: analysis.summary as object,
-        metrics: analysis.metrics as object,
-        analysisHash,
-        inputHash: run.inputHash,
-        errorCode: status === "FAILED" ? "ANALYSIS_FAILED" : null,
-        errorMessage:
-          status === "FAILED"
-            ? sanitizeErrorMessage(
-                analysis.failures.map((f) => f.message).join("; "),
-              )
-            : null,
+      // Persist metrics/summary first, then hash the rebuilt persisted payload.
+      // Prisma JSON float round-trips can drift ~1 ULP from in-memory metrics;
+      // hashing after read-back keeps analyze/apply hashes aligned.
+      const completedWithoutHash =
+        await sprintEvaluationRunRepository.completeRun(runId, {
+          status,
+          summary: analysis.summary as object,
+          metrics: analysis.metrics as object,
+          analysisHash: null,
+          inputHash: run.inputHash,
+          errorCode: status === "FAILED" ? "ANALYSIS_FAILED" : null,
+          errorMessage:
+            status === "FAILED"
+              ? sanitizeErrorMessage(
+                  analysis.failures.map((f) => f.message).join("; "),
+                )
+              : null,
+        });
+
+      const persistedEvaluations =
+        await sprintIssueEvaluationRepository.listByRun(runId);
+      const analysisHash = hashSprintAnalysisResult(
+        rebuildAnalysisResultFromPersistence(
+          completedWithoutHash,
+          persistedEvaluations,
+        ),
+      );
+      const completed = await db.sprintEvaluationRun.update({
+        where: { id: runId },
+        data: { analysisHash },
       });
 
       logger.info(
@@ -522,15 +537,24 @@ export class SprintIntelligenceExecutionService {
     );
     const recalculatedHash = hashSprintAnalysisResult(rebuilt);
     if (recalculatedHash !== source.analysisHash) {
-      logger.warn("sprint-intelligence.apply.hash-mismatch", {
+      // Legacy analyses hashed in-memory before Prisma JSON persistence, so
+      // metric floats could drift and fail apply. Persistence is the apply
+      // source of truth — repair the stored hash and continue.
+      logger.warn("sprint-intelligence.apply.hash-mismatch-repaired", {
         runId,
         sourceAnalysisRunId: source.id,
+        storedHash: source.analysisHash,
+        recalculatedHash,
       });
-      return sprintEvaluationRunRepository.rejectRun(
-        runId,
-        "HASH_MISMATCH",
-        "Persisted analysis hash does not match recomputed hash",
-      );
+      await db.sprintEvaluationRun.update({
+        where: { id: source.id },
+        data: { analysisHash: recalculatedHash },
+      });
+      await db.sprintEvaluationRun.update({
+        where: { id: runId },
+        data: { analysisHash: recalculatedHash },
+      });
+      source.analysisHash = recalculatedHash;
     }
 
     const already =

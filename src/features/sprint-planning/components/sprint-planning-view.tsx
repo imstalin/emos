@@ -23,7 +23,10 @@ import type {
   SprintQaOwnerResult,
 } from "@/domain/types/sprint-planning";
 import { RoleCapacityBar } from "@/features/sprint-planning/components/role-capacity-bar";
-import { SprintPlanningItemRow } from "@/features/sprint-planning/components/sprint-planning-item-row";
+import {
+  SprintPlanningItemRow,
+  type SprintMoveOption,
+} from "@/features/sprint-planning/components/sprint-planning-item-row";
 import { formatRelativeDate } from "@/lib/formatters";
 
 interface SprintPlanningViewProps {
@@ -108,7 +111,7 @@ export function SprintPlanningView({ initialBoard }: SprintPlanningViewProps) {
       if ("assigned" in result) {
         setSelectedIds(new Set());
         setStatusMessage(
-          `Assigned ${result.assigned} item(s) to ${result.sprintName ?? "Sprint Backlog"}. GitLab updated: ${result.gitlabUpdated}.`,
+          `Moved ${result.assigned} item(s) to ${result.sprintName ?? "Sprint Backlog"}. GitLab updated: ${result.gitlabUpdated}.`,
         );
       } else if ("updated" in result) {
         setStatusMessage(
@@ -137,6 +140,29 @@ export function SprintPlanningView({ initialBoard }: SprintPlanningViewProps) {
       qaOwnerId,
     });
   }
+
+  function handleMoveToSprint(workItemId: string, sprintId: string) {
+    mutation.mutate({
+      action: "assign",
+      sprintId,
+      workItemIds: [workItemId],
+      syncGitLab: true,
+    });
+  }
+
+  function handleMoveToBacklog(workItemId: string) {
+    mutation.mutate({
+      action: "backlog",
+      workItemIds: [workItemId],
+      syncGitLab: true,
+    });
+  }
+
+  const sprintMoveOptions: SprintMoveOption[] = board.sprints.map((sprint) => ({
+    id: sprint.id,
+    name: sprint.name,
+    isActive: sprint.isActive,
+  }));
 
   const selectedCount = selectedIds.size;
   const bottleneckMessage =
@@ -290,6 +316,7 @@ export function SprintPlanningView({ initialBoard }: SprintPlanningViewProps) {
                 >
                   {board.sprints.map((sprint) => (
                     <option key={sprint.id} value={sprint.id}>
+                      {sprint.isActive ? "Active · " : ""}
                       {sprint.name}
                     </option>
                   ))}
@@ -306,7 +333,21 @@ export function SprintPlanningView({ initialBoard }: SprintPlanningViewProps) {
                     })
                   }
                 >
-                  Assign to sprint
+                  Move to sprint
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={selectedCount === 0 || mutation.isPending}
+                  onClick={() =>
+                    mutation.mutate({
+                      action: "backlog",
+                      workItemIds: [...selectedIds],
+                      syncGitLab: true,
+                    })
+                  }
+                >
+                  Move to backlog
                 </Button>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -354,6 +395,10 @@ export function SprintPlanningView({ initialBoard }: SprintPlanningViewProps) {
                       selected={selectedIds.has(item.id)}
                       onToggle={toggleSelection}
                       onQaOwnerChange={handleQaOwnerChange}
+                      currentSprintId={null}
+                      sprintMoveOptions={sprintMoveOptions}
+                      onMoveToSprint={handleMoveToSprint}
+                      moveUpdating={mutation.isPending}
                     />
                   ))
                 )}
@@ -382,6 +427,43 @@ export function SprintPlanningView({ initialBoard }: SprintPlanningViewProps) {
                       ? ` · ${sprint.qaUnassignedCount} need tester`
                       : ""}
                   </p>
+                  {sprint.items.some((item) => selectedIds.has(item.id)) ? (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        disabled={mutation.isPending || !targetSprintId}
+                        onClick={() =>
+                          mutation.mutate({
+                            action: "assign",
+                            sprintId: targetSprintId,
+                            workItemIds: sprint.items
+                              .filter((item) => selectedIds.has(item.id))
+                              .map((item) => item.id),
+                            syncGitLab: true,
+                          })
+                        }
+                      >
+                        Move selected
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        disabled={mutation.isPending}
+                        onClick={() =>
+                          mutation.mutate({
+                            action: "backlog",
+                            workItemIds: sprint.items
+                              .filter((item) => selectedIds.has(item.id))
+                              .map((item) => item.id),
+                            syncGitLab: true,
+                          })
+                        }
+                      >
+                        To backlog
+                      </Button>
+                    </div>
+                  ) : null}
                 </CardHeader>
                 <CardContent className="min-h-0 flex-1 p-0">
                   <ul className="max-h-[32rem] divide-y overflow-y-auto">
@@ -395,9 +477,17 @@ export function SprintPlanningView({ initialBoard }: SprintPlanningViewProps) {
                           key={item.id}
                           item={item}
                           qaMembers={board.qaMembers}
+                          selectable
                           showQaOwner={sprint.isActive}
                           qaUpdating={mutation.isPending}
+                          selected={selectedIds.has(item.id)}
+                          onToggle={toggleSelection}
                           onQaOwnerChange={handleQaOwnerChange}
+                          currentSprintId={sprint.id}
+                          sprintMoveOptions={sprintMoveOptions}
+                          onMoveToSprint={handleMoveToSprint}
+                          onMoveToBacklog={handleMoveToBacklog}
+                          moveUpdating={mutation.isPending}
                         />
                       ))
                     )}

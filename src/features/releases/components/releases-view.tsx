@@ -1,7 +1,11 @@
-import { Rocket } from "lucide-react";
+"use client";
+
+import { Eye, EyeOff, Rocket } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import { AppHeader } from "@/components/layout/app-header";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -13,7 +17,10 @@ import type { ReleasesDashboard } from "@/domain/types/releases";
 import { SprintHealthCard } from "@/features/dashboard/components/health-cards";
 import { WorkItemList } from "@/features/dashboard/components/work-item-list";
 import { ReleaseCard } from "@/features/releases/components/release-card";
-import { ReleaseEpicCard } from "@/features/releases/components/release-epic-card";
+import {
+  ReleaseEpicCard,
+  type ReleaseEpicOption,
+} from "@/features/releases/components/release-epic-card";
 import { ReleaseEpicSyncButton } from "@/features/releases/components/release-epic-sync-button";
 import { PhoenixReleasePlanCard } from "@/features/releases/components/phoenix-release-plan-card";
 import { ImpactMatrixCard } from "@/features/releases/components/impact-matrix-card";
@@ -23,9 +30,51 @@ interface ReleasesViewProps {
   data: ReleasesDashboard;
 }
 
+function isEpicOpen(state: string): boolean {
+  return state === "opened";
+}
+
 export function ReleasesView({ data }: ReleasesViewProps) {
-  const hasMonthlyReleases = data.monthlyReleases.length > 0;
+  const [showClosedEpics, setShowClosedEpics] = useState(false);
+
   const openEpicCount = data.summary.openEpics || data.summary.upcoming;
+  const closedEpicCount = data.monthlyReleases.reduce(
+    (count, group) =>
+      count + group.epics.filter((epic) => !isEpicOpen(epic.state)).length,
+    0,
+  );
+
+  const epicOptions: ReleaseEpicOption[] = useMemo(
+    () =>
+      data.monthlyReleases.flatMap((group) =>
+        group.epics
+          .filter((epic) => isEpicOpen(epic.state))
+          .map((epic) => ({
+            epicIid: epic.epicIid,
+            title: epic.title,
+            stream: epic.stream,
+            monthKey: epic.monthKey,
+            state: epic.state,
+          })),
+      ),
+    [data.monthlyReleases],
+  );
+
+  const visibleGroups = useMemo(
+    () =>
+      data.monthlyReleases
+        .map((group) => ({
+          ...group,
+          epics: group.epics.filter(
+            (epic) => showClosedEpics || isEpicOpen(epic.state),
+          ),
+        }))
+        .filter((group) => group.epics.length > 0),
+    [data.monthlyReleases, showClosedEpics],
+  );
+
+  const hasMonthlyReleases = data.monthlyReleases.length > 0;
+  const hasVisibleEpics = visibleGroups.length > 0;
 
   return (
     <>
@@ -35,6 +84,18 @@ export function ReleasesView({ data }: ReleasesViewProps) {
         actions={
           <div className="flex flex-wrap items-center gap-3">
             <ReleaseEpicSyncButton />
+            {closedEpicCount > 0 ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowClosedEpics((value) => !value)}
+              >
+                {showClosedEpics ? <EyeOff /> : <Eye />}
+                {showClosedEpics
+                  ? "Hide closed epics"
+                  : `Show closed epics (${closedEpicCount})`}
+              </Button>
+            ) : null}
             <Badge variant="outline" className="gap-1">
               <Rocket className="size-3" />
               {openEpicCount} open epics
@@ -92,9 +153,9 @@ export function ReleasesView({ data }: ReleasesViewProps) {
           </Card>
         ) : null}
 
-        {hasMonthlyReleases ? (
+        {hasMonthlyReleases && hasVisibleEpics ? (
           <div className="space-y-6">
-            {data.monthlyReleases.map((group) => (
+            {visibleGroups.map((group) => (
               <section key={group.monthKey} className="space-y-4">
                 <div className="flex flex-wrap items-end justify-between gap-3">
                   <div>
@@ -103,6 +164,13 @@ export function ReleasesView({ data }: ReleasesViewProps) {
                     </h2>
                     <p className="text-sm text-muted-foreground">
                       Product, Observations, and Mobile epics with effort rollups
+                      {!showClosedEpics &&
+                      group.epics.length <
+                        (data.monthlyReleases.find(
+                          (item) => item.monthKey === group.monthKey,
+                        )?.epics.length ?? 0)
+                        ? " · closed epics hidden"
+                        : ""}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -118,12 +186,31 @@ export function ReleasesView({ data }: ReleasesViewProps) {
 
                 <div className="grid gap-4 xl:grid-cols-3">
                   {group.epics.map((epic) => (
-                    <ReleaseEpicCard key={epic.id} epic={epic} />
+                    <ReleaseEpicCard
+                      key={epic.id}
+                      epic={epic}
+                      epicOptions={epicOptions}
+                    />
                   ))}
                 </div>
               </section>
             ))}
           </div>
+        ) : null}
+
+        {hasMonthlyReleases && !hasVisibleEpics ? (
+          <Card>
+            <CardContent className="py-12 text-center text-sm text-muted-foreground">
+              All release epics are closed.{" "}
+              <button
+                type="button"
+                className="font-medium text-foreground underline-offset-4 hover:underline"
+                onClick={() => setShowClosedEpics(true)}
+              >
+                Show closed epics
+              </button>
+            </CardContent>
+          </Card>
         ) : null}
 
         {!hasMonthlyReleases && data.releases.length > 0 ? (

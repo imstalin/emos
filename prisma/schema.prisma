@@ -394,9 +394,13 @@ model RoadmapItem {
   core        Boolean  @default(false)
   mobile      Boolean  @default(false)
   data        Boolean  @default(false)
-  title       String
-  description String   @default("") @db.Text
-  gitlab      Json?
+  title         String
+  description   String   @default("") @db.Text
+  /// GitLab-ready title (AI-generated or edited). Used when creating GitLab issues.
+  aiTitle       String   @default("") @map("ai_title")
+  /// GitLab-ready description (AI-generated or edited). Used when creating GitLab issues.
+  aiDescription String   @default("") @map("ai_description") @db.Text
+  gitlab        Json?
   hoursSpent  Float?
   position    Int      @default(0)
   createdAt   DateTime @default(now())

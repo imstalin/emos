@@ -1,8 +1,20 @@
+"use client";
+
 import type { ReleaseEpicDetail } from "@/domain/types/releases";
 import type { ReleaseStream } from "@prisma/client";
-import { AlertTriangle, CheckCircle2, Circle, ExternalLink } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Circle,
+  ExternalLink,
+  Loader2,
+  XCircle,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -13,6 +25,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { WorkItemList } from "@/features/dashboard/components/work-item-list";
 import { getHealthClass } from "@/lib/formatters";
+import { cn } from "@/lib/utils";
 
 const STREAM_LABELS: Record<ReleaseStream, string> = {
   PRODUCT: "Product",
@@ -20,10 +33,96 @@ const STREAM_LABELS: Record<ReleaseStream, string> = {
   MOBILE: "Mobile",
 };
 
-export function ReleaseEpicCard({ epic }: { epic: ReleaseEpicDetail }) {
+export type ReleaseEpicOption = {
+  epicIid: number;
+  title: string;
+  stream: ReleaseStream;
+  monthKey: string;
+  state: string;
+};
+
+export function ReleaseEpicCard({
+  epic,
+  epicOptions,
+}: {
+  epic: ReleaseEpicDetail;
+  epicOptions: ReleaseEpicOption[];
+}) {
+  const router = useRouter();
   const checklistComplete = epic.checklist.filter(
     (item) => item.status === "complete",
   ).length;
+  const [closing, setClosing] = useState(false);
+  const [movingId, setMovingId] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const moveTargets = epicOptions.filter(
+    (option) =>
+      option.epicIid !== epic.epicIid && option.state === "opened",
+  );
+  const isOpen = epic.state === "opened";
+
+  async function handleCloseEpic() {
+    if (!isOpen) return;
+    const confirmed = window.confirm(
+      `Close epic #${epic.epicIid} “${epic.title}” in GitLab?`,
+    );
+    if (!confirmed) return;
+
+    setClosing(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/releases/close-epic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ epicId: epic.id }),
+      });
+      const payload = (await response.json()) as { error?: string; state?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Failed to close epic");
+      }
+      setMessage(`Epic closed (${payload.state ?? "closed"})`);
+      router.refresh();
+    } catch (closeError) {
+      setError(
+        closeError instanceof Error ? closeError.message : "Failed to close epic",
+      );
+    } finally {
+      setClosing(false);
+    }
+  }
+
+  async function handleMoveIssue(workItemId: string, targetEpicIid: number) {
+    setMovingId(workItemId);
+    setError(null);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/releases/move-issue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workItemId, targetEpicIid }),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Failed to move issue");
+      }
+      const target = moveTargets.find((option) => option.epicIid === targetEpicIid);
+      setMessage(
+        target
+          ? `Moved to ${STREAM_LABELS[target.stream]} · ${target.title}`
+          : "Moved to target epic",
+      );
+      router.refresh();
+    } catch (moveError) {
+      setError(
+        moveError instanceof Error ? moveError.message : "Failed to move issue",
+      );
+    } finally {
+      setMovingId(null);
+    }
+  }
 
   return (
     <Card>
@@ -36,9 +135,7 @@ export function ReleaseEpicCard({ epic }: { epic: ReleaseEpicDetail }) {
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {epic.state !== "opened" ? (
-              <Badge variant="outline">Closed</Badge>
-            ) : null}
+            {!isOpen ? <Badge variant="outline">Closed</Badge> : null}
             <Badge variant="outline" className={getHealthClass(epic.health)}>
               {epic.health.replace("_", " ")}
             </Badge>
@@ -54,6 +151,32 @@ export function ReleaseEpicCard({ epic }: { epic: ReleaseEpicDetail }) {
               </a>
             ) : null}
           </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {isOpen ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void handleCloseEpic()}
+              disabled={closing}
+            >
+              {closing ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <XCircle />
+              )}
+              Close epic
+            </Button>
+          ) : null}
+          {message ? (
+            <span className="text-xs text-emerald-600 dark:text-emerald-400">
+              {message}
+            </span>
+          ) : null}
+          {error ? (
+            <span className="text-xs text-destructive">{error}</span>
+          ) : null}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3">
@@ -115,11 +238,81 @@ export function ReleaseEpicCard({ epic }: { epic: ReleaseEpicDetail }) {
 
         <div>
           <p className="mb-2 text-sm font-medium">Open work items</p>
-          <WorkItemList
-            items={epic.workItems}
-            emptyMessage="No open items linked to this epic"
-            compact
-          />
+          {epic.workItems.length === 0 ? (
+            <WorkItemList
+              items={[]}
+              emptyMessage="No open items linked to this epic"
+              compact
+            />
+          ) : (
+            <div className="max-h-72 overflow-y-auto overscroll-contain divide-y rounded-lg border">
+              {epic.workItems.map((item) => (
+                <div key={item.id} className="space-y-2 px-3 py-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      {item.webUrl ? (
+                        <a
+                          href={item.webUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="truncate text-sm font-medium hover:underline"
+                        >
+                          {item.title}
+                        </a>
+                      ) : (
+                        <p className="truncate text-sm font-medium">{item.title}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        {item.projectName}
+                        {item.assigneeName ? ` · ${item.assigneeName}` : ""}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="shrink-0 text-[10px]">
+                      {item.state.replace("_", " ")}
+                    </Badge>
+                  </div>
+
+                  {moveTargets.length > 0 ? (
+                    <div className="flex items-center gap-2">
+                      <label
+                        className="sr-only"
+                        htmlFor={`move-${item.id}`}
+                      >
+                        Move to epic
+                      </label>
+                      <select
+                        id={`move-${item.id}`}
+                        className={cn(
+                          "h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs",
+                          "disabled:cursor-not-allowed disabled:opacity-50",
+                        )}
+                        defaultValue=""
+                        disabled={movingId === item.id}
+                        onChange={(event) => {
+                          const value = Number(event.target.value);
+                          if (!Number.isFinite(value) || value <= 0) return;
+                          void handleMoveIssue(item.id, value);
+                          event.target.value = "";
+                        }}
+                      >
+                        <option value="" disabled>
+                          Move to epic…
+                        </option>
+                        {moveTargets.map((option) => (
+                          <option key={option.epicIid} value={option.epicIid}>
+                            {STREAM_LABELS[option.stream]} · {option.title}
+                          </option>
+                        ))}
+                      </select>
+                      {movingId === item.id ? (
+                        <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

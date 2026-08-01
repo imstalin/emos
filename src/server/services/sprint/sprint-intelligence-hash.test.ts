@@ -8,6 +8,8 @@ import {
   canonicalizeJson,
   hashSprintAnalysisInput,
   hashSprintAnalysisResult,
+  normalizeJsonNumber,
+  toIsoTimestamp,
   withUniqueRunKeySuffix,
 } from "./sprint-intelligence-hash";
 
@@ -226,5 +228,70 @@ describe("sprint-intelligence hashing", () => {
       evaluations: [],
     });
     expect(withEmptyPlans).not.toBe(actionsOnly);
+  });
+
+  it("normalizes Prisma JSON float drift in metrics hashes", () => {
+    const native = (23 / 42) * 100; // 54.761904761904766
+    const drifted = 54.76190476190477; // observed Prisma JSON read-back
+    expect(native).not.toBe(drifted);
+    expect(normalizeJsonNumber(native)).toBe(normalizeJsonNumber(drifted));
+
+    const base = {
+      milestone,
+      managedLabels: DEFAULT_SPRINT_INTELLIGENCE_CONFIG.managedLabels,
+      summary: { issuesEvaluated: 1 } as never,
+      labelPlans: [],
+      evaluations: [],
+    };
+    expect(
+      hashSprintAnalysisResult({
+        ...base,
+        metrics: { completedUnplannedPercent: native } as never,
+      }),
+    ).toBe(
+      hashSprintAnalysisResult({
+        ...base,
+        metrics: { completedUnplannedPercent: drifted } as never,
+      }),
+    );
+  });
+
+  it("hashes Date and ISO string timestamps the same", () => {
+    const iso = "2026-07-15T04:59:08.026Z";
+    const base = {
+      milestone,
+      managedLabels: DEFAULT_SPRINT_INTELLIGENCE_CONFIG.managedLabels,
+      metrics: { plannedCount: 1 } as never,
+      summary: { issuesEvaluated: 1 } as never,
+      labelPlans: [],
+    };
+    const evaluation = {
+      projectId: 1,
+      issueId: 10,
+      issueIid: 1,
+      planningStatus: "Planned",
+      deliveryStatus: "Committed",
+      workTypes: ["bug"],
+      excludedFromCommitment: false,
+      completedWithinSprint: true,
+      existingLabels: [],
+      labelsToAdd: ["sprint::planned"],
+      managedLabelsToRemove: [],
+      reasonCodes: [],
+      closedAt: null,
+    };
+    expect(toIsoTimestamp(iso)).toBe(iso);
+    expect(toIsoTimestamp(new Date(iso))).toBe(iso);
+    expect(
+      hashSprintAnalysisResult({
+        ...base,
+        evaluations: [{ ...evaluation, assignmentTimestamp: new Date(iso) } as never],
+      }),
+    ).toBe(
+      hashSprintAnalysisResult({
+        ...base,
+        evaluations: [{ ...evaluation, assignmentTimestamp: iso } as never],
+      }),
+    );
   });
 });

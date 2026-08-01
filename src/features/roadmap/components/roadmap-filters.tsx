@@ -66,7 +66,7 @@ export function RoadmapFilters({
         </Group>
 
         <TextInput
-          placeholder="Search title or description…"
+          placeholder="Search title, description, or AI fields…"
           leftSection={<IconSearch size={16} />}
           value={filters.search}
           onChange={(event) => updateFilter("search", event.currentTarget.value)}

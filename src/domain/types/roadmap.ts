@@ -31,6 +31,10 @@ export interface RoadmapItem {
   data: boolean;
   title: string;
   description: string;
+  /** GitLab-ready title; preferred when creating GitLab issues. */
+  aiTitle: string;
+  /** GitLab-ready description; preferred when creating GitLab issues. */
+  aiDescription: string;
   gitlab?: RoadmapGitLabLink;
   hoursSpent?: number;
 }

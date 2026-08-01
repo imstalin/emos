@@ -8,6 +8,7 @@ import type {
   GitLabNote,
   GitLabPipeline,
   GitLabProject,
+  GitLabUpdateEpicPayload,
   GitLabUpdateIssuePayload,
   GitLabUpdateMergeRequestPayload,
   GitLabUser,
@@ -259,6 +260,13 @@ export class GitLabClient {
 
   async assignIssueToEpic(epicIid: number, issueId: number): Promise<void> {
     return this.getProvider().assignIssueToEpic(epicIid, issueId);
+  }
+
+  async updateEpic(
+    epicIid: number,
+    payload: GitLabUpdateEpicPayload,
+  ): Promise<GitLabEpic> {
+    return this.getProvider().updateEpic(epicIid, payload);
   }
 
   async listIssueLinks(

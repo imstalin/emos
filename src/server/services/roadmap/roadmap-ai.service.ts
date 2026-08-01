@@ -7,12 +7,26 @@ import type {
 import { getOpenAIConfig } from "@/lib/openai-config";
 import { logger } from "@/lib/logger";
 
-const SYSTEM_PROMPT = `You write concise engineering issue descriptions for a FY27 product roadmap.
+const SYSTEM_PROMPT = `You write concise GitLab-ready titles and descriptions for a FY27 product roadmap.
 Write in clear professional English suitable for a GitLab issue in an enterprise admin platform project.
-Use short paragraphs and bullet lists for acceptance criteria when helpful.
-Do not include markdown headings like # or ##.
-Keep descriptions under 200 words unless rewriting a long existing description.
+Return ONLY valid JSON with keys "aiTitle" and "aiDescription".
+aiTitle: a short actionable issue title (max ~100 characters), no trailing period.
+aiDescription: short paragraphs and bullet lists for acceptance criteria when helpful; under 200 words; no markdown headings like # or ##.
 Do not invent dates, URLs, or ticket numbers.`;
+
+function extractJsonObject(text: string): unknown {
+  const trimmed = text.trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const start = trimmed.indexOf("{");
+    const end = trimmed.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      return JSON.parse(trimmed.slice(start, end + 1));
+    }
+    throw new Error("AI response was not valid JSON");
+  }
+}
 
 export class RoadmapAiService {
   async generateDescription(
@@ -28,44 +42,73 @@ export class RoadmapAiService {
     const client = new OpenAI({ apiKey: config.apiKey });
     const userPrompt =
       input.mode === "rewrite"
-        ? `Rewrite and improve this roadmap item description for clarity and actionability.
+        ? `Rewrite and improve this roadmap item for a GitLab issue (title + description).
 
-Title: ${input.title}
+Planning title: ${input.title}
 Project: ${input.project}
 Category: ${input.category}
 Priority: ${input.priority}
 Quarter: ${input.quarter}
 Assignee: ${input.assignee || "Unassigned"}
 
-Current description:
-${input.description?.trim() || "(empty)"}`
-        : `Generate a new GitLab-ready description for this FY27 roadmap item.
+Current planning description:
+${input.description?.trim() || "(empty)"}
 
-Title: ${input.title}
+Current AI title (if any):
+${input.aiTitle?.trim() || "(empty)"}
+
+Current AI description (if any):
+${input.aiDescription?.trim() || "(empty)"}
+
+Return improved aiTitle and aiDescription as JSON.`
+        : `Generate a GitLab-ready title and description for this FY27 roadmap item.
+
+Planning title: ${input.title}
 Project: ${input.project}
 Category: ${input.category}
 Priority: ${input.priority}
 Quarter: ${input.quarter}
 Assignee: ${input.assignee || "Unassigned"}
 
-Include: problem/context, scope, and 2-4 acceptance criteria bullets.`;
+Planning description (context):
+${input.description?.trim() || "(empty)"}
+
+aiDescription should include: problem/context, scope, and 2-4 acceptance criteria bullets.
+Return aiTitle and aiDescription as JSON.`;
 
     try {
       const completion = await client.chat.completions.create({
         model: config.model,
         temperature: 0.5,
+        response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: userPrompt },
         ],
       });
 
-      const description = completion.choices[0]?.message?.content?.trim();
-      if (!description) {
+      const content = completion.choices[0]?.message?.content?.trim();
+      if (!content) {
         throw new Error("Empty response from OpenAI");
       }
 
-      return { description };
+      const parsed = extractJsonObject(content) as {
+        aiTitle?: unknown;
+        aiDescription?: unknown;
+        title?: unknown;
+        description?: unknown;
+      };
+
+      const aiTitle = String(parsed.aiTitle ?? parsed.title ?? "").trim();
+      const aiDescription = String(
+        parsed.aiDescription ?? parsed.description ?? "",
+      ).trim();
+
+      if (!aiTitle || !aiDescription) {
+        throw new Error("AI response missing aiTitle or aiDescription");
+      }
+
+      return { aiTitle, aiDescription };
     } catch (error) {
       logger.error("Roadmap AI description failed", { error });
       throw error instanceof Error ? error : new Error("AI description failed");

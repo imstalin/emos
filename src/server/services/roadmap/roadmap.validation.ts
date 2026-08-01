@@ -36,6 +36,8 @@ export const roadmapItemInputSchema = z.object({
   data: z.boolean(),
   title: z.string().trim().min(1),
   description: z.string(),
+  aiTitle: z.string().optional().default(""),
+  aiDescription: z.string().optional().default(""),
   gitlab: gitlabLinkSchema,
   hoursSpent: z.number().nonnegative().optional(),
 });

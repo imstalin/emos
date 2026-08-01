@@ -10,6 +10,30 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Prisma/Postgres JSON round-trips can nudge IEEE floats by ~1 ULP.
+ * Normalize so in-memory metrics and persisted metrics hash identically.
+ */
+export function normalizeJsonNumber(value: number): number {
+  if (!Number.isFinite(value)) return value;
+  if (Number.isInteger(value)) return value;
+  return Number(value.toPrecision(12));
+}
+
+export function toIsoTimestamp(
+  value: Date | string | null | undefined,
+): string | null {
+  if (value == null) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  }
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
+  }
+  return null;
+}
+
 /** Deterministic JSON canonicalization (sorted object keys). */
 export function canonicalizeJson(value: unknown): string {
   return JSON.stringify(sortValue(value));
@@ -28,6 +52,9 @@ function sortValue(value: unknown): unknown {
   }
   if (value instanceof Date) {
     return value.toISOString();
+  }
+  if (typeof value === "number") {
+    return normalizeJsonNumber(value);
   }
   return value;
 }
@@ -83,11 +110,18 @@ export function canonicalizeSprintAnalysisResult(
     managedLabels: result.managedLabels,
     metrics: result.metrics,
     summary: result.summary,
-    labelPlans: [...result.labelPlans].sort((a, b) => {
-      const projectDelta = Number(a.projectId) - Number(b.projectId);
-      if (projectDelta !== 0) return projectDelta;
-      return a.issueIid - b.issueIid;
-    }),
+    labelPlans: [...result.labelPlans]
+      .map((plan) => ({
+        projectId: Number(plan.projectId),
+        issueIid: plan.issueIid,
+        labelsToAdd: [...plan.labelsToAdd].sort(),
+        labelsToRemove: [...plan.labelsToRemove].sort(),
+      }))
+      .sort((a, b) => {
+        const projectDelta = a.projectId - b.projectId;
+        if (projectDelta !== 0) return projectDelta;
+        return a.issueIid - b.issueIid;
+      }),
     evaluations: [...result.evaluations]
       .map((evaluation) => ({
         projectId: evaluation.projectId,
@@ -95,15 +129,15 @@ export function canonicalizeSprintAnalysisResult(
         issueIid: evaluation.issueIid,
         planningStatus: evaluation.planningStatus,
         deliveryStatus: evaluation.deliveryStatus,
-        workTypes: evaluation.workTypes,
+        workTypes: [...evaluation.workTypes].sort(),
         excludedFromCommitment: evaluation.excludedFromCommitment,
         completedWithinSprint: evaluation.completedWithinSprint,
         existingLabels: [...evaluation.existingLabels].sort(),
         labelsToAdd: [...evaluation.labelsToAdd].sort(),
         managedLabelsToRemove: [...evaluation.managedLabelsToRemove].sort(),
         reasonCodes: [...evaluation.reasonCodes].sort(),
-        assignmentTimestamp: evaluation.assignmentTimestamp?.toISOString() ?? null,
-        closedAt: evaluation.closedAt?.toISOString() ?? null,
+        assignmentTimestamp: toIsoTimestamp(evaluation.assignmentTimestamp),
+        closedAt: toIsoTimestamp(evaluation.closedAt),
       }))
       .sort((a, b) => {
         const projectDelta = a.projectId - b.projectId;

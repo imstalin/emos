@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Loader2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import type {
@@ -9,6 +9,12 @@ import type {
 } from "@/domain/types/sprint-planning";
 import { getPriorityVariant, getStateLabel } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
+
+export type SprintMoveOption = {
+  id: string;
+  name: string;
+  isActive: boolean;
+};
 
 interface SprintPlanningItemRowProps {
   item: SprintPlanningItem;
@@ -19,6 +25,12 @@ interface SprintPlanningItemRowProps {
   selectable?: boolean;
   showQaOwner?: boolean;
   qaUpdating?: boolean;
+  /** Current sprint id when the row is inside a sprint column (null for backlog). */
+  currentSprintId?: string | null;
+  sprintMoveOptions?: SprintMoveOption[];
+  onMoveToSprint?: (workItemId: string, sprintId: string) => void;
+  onMoveToBacklog?: (workItemId: string) => void;
+  moveUpdating?: boolean;
 }
 
 export function SprintPlanningItemRow({
@@ -30,7 +42,19 @@ export function SprintPlanningItemRow({
   selectable = false,
   showQaOwner = false,
   qaUpdating = false,
+  currentSprintId = null,
+  sprintMoveOptions = [],
+  onMoveToSprint,
+  onMoveToBacklog,
+  moveUpdating = false,
 }: SprintPlanningItemRowProps) {
+  const moveTargets = sprintMoveOptions.filter(
+    (sprint) => sprint.id !== currentSprintId,
+  );
+  const canMove =
+    Boolean(onMoveToSprint || onMoveToBacklog) &&
+    (moveTargets.length > 0 || Boolean(onMoveToBacklog && currentSprintId));
+
   return (
     <li
       className={cn(
@@ -138,6 +162,46 @@ export function SprintPlanningItemRow({
             </span>
           ) : null}
         </div>
+
+        {canMove ? (
+          <div className="flex items-center gap-2">
+            <label className="sr-only" htmlFor={`move-sprint-${item.id}`}>
+              Move to sprint
+            </label>
+            <select
+              id={`move-sprint-${item.id}`}
+              className="h-7 min-w-0 flex-1 rounded-md border border-input bg-background px-1.5 text-[11px] disabled:cursor-not-allowed disabled:opacity-50"
+              defaultValue=""
+              disabled={moveUpdating}
+              onChange={(event) => {
+                const value = event.target.value;
+                event.target.value = "";
+                if (!value) return;
+                if (value === "__backlog__") {
+                  onMoveToBacklog?.(item.id);
+                  return;
+                }
+                onMoveToSprint?.(item.id, value);
+              }}
+            >
+              <option value="" disabled>
+                Move to sprint…
+              </option>
+              {moveTargets.map((sprint) => (
+                <option key={sprint.id} value={sprint.id}>
+                  {sprint.isActive ? "Active · " : ""}
+                  {sprint.name}
+                </option>
+              ))}
+              {onMoveToBacklog && currentSprintId ? (
+                <option value="__backlog__">Sprint Backlog</option>
+              ) : null}
+            </select>
+            {moveUpdating ? (
+              <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </li>
   );

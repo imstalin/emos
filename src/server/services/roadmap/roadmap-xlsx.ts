@@ -73,6 +73,8 @@ function mapSheetRowToItem(
     data: parseBooleanFlag(row[dataIdx]),
     title: String(title),
     description: String(row[descriptionIdx] ?? ""),
+    aiTitle: "",
+    aiDescription: "",
   };
 }
 

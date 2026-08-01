@@ -75,11 +75,25 @@ export function buildGitLabLabels(item: Pick<
   return [...new Set(labels)];
 }
 
+export function resolveGitLabIssueTitle(
+  item: Pick<RoadmapItem, "title" | "aiTitle">,
+): string {
+  return item.aiTitle.trim() || item.title.trim();
+}
+
+export function resolveGitLabIssueBody(
+  item: Pick<RoadmapItem, "description" | "aiDescription">,
+): string {
+  return item.aiDescription.trim() || item.description.trim();
+}
+
 export function buildGitLabIssueDescription(
   item: Pick<
     RoadmapItem,
     | "title"
     | "description"
+    | "aiTitle"
+    | "aiDescription"
     | "project"
     | "category"
     | "quarter"
@@ -93,20 +107,20 @@ export function buildGitLabIssueDescription(
   >,
 ): string {
   const sections = [
-    item.description.trim(),
-    "",
-    "---",
-    "**FY27 Roadmap metadata**",
-    `- Project: ${item.project}`,
-    `- Category: ${item.category}`,
-    `- Quarter: ${item.quarter}`,
-    `- Timeline: ${item.timeline}`,
-    `- Include: ${item.include}`,
-    `- Assignee (plan): ${item.assignee || "Unassigned"}`,
-    `- Estimated hours: ${item.hours === "TBD" ? "TBD" : `${item.hours}h`}`,
-    `- Core / Mobile / Data: ${item.core ? "Y" : "N"} / ${item.mobile ? "Y" : "N"} / ${item.data ? "Y" : "N"}`,
-    "",
-    "_Created from EMOS Roadmap Maintenance_",
+    resolveGitLabIssueBody(item),
+    // "",
+    // "---",
+    // "**FY27 Roadmap metadata**",
+    // `- Project: ${item.project}`,
+    // `- Category: ${item.category}`,
+    // `- Quarter: ${item.quarter}`,
+    // `- Timeline: ${item.timeline}`,
+    // `- Include: ${item.include}`,
+    // `- Assignee (plan): ${item.assignee || "Unassigned"}`,
+    // `- Estimated hours: ${item.hours === "TBD" ? "TBD" : `${item.hours}h`}`,
+    // `- Core / Mobile / Data: ${item.core ? "Y" : "N"} / ${item.mobile ? "Y" : "N"} / ${item.data ? "Y" : "N"}`,
+    // "",
+    // "_Created from EMOS Roadmap Maintenance_",
   ];
 
   return sections.filter((line, index, arr) => {
@@ -172,7 +186,7 @@ export function buildGitLabIssuePreview(
   return {
     projectId: ADMIN_GITLAB_PROJECT_ID,
     projectName: params.projectName,
-    title: item.title.trim(),
+    title: resolveGitLabIssueTitle(item),
     description: buildGitLabIssueDescription(item),
     labels: buildGitLabLabels(item),
     weight: hoursToGitLabWeight(item.hours),

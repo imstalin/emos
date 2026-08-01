@@ -7,6 +7,13 @@ import {
   formatTicketContextForAssistant,
 } from "@/server/services/assistant/follow-up-ticket.service";
 
+function daysSince(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const ms = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(ms)) return null;
+  return Math.max(0, Math.floor(ms / 86_400_000));
+}
+
 export async function buildAssistantContext(): Promise<string> {
   const [followUps, team, releases, governance] = await Promise.all([
     followUpsService.getDashboard(),
@@ -16,20 +23,28 @@ export async function buildAssistantContext(): Promise<string> {
   ]);
 
   const followUpLines = followUps.items
-    .slice(0, 12)
+    .slice(0, 15)
     .map(
       (item) =>
-        `- [${item.priority}] ${item.category}: ${item.title}${item.assigneeName ? ` (${item.assigneeName})` : ""}`,
+        `- [${item.priority}] ${item.category}: ${item.title}${item.assigneeName ? ` (${item.assigneeName})` : ""} — ${item.reason}. Action: ${item.suggestedAction}${item.webUrl ? ` | ${item.webUrl}` : ""}`,
     )
     .join("\n");
 
-  const teamLines = team.members
-    .filter((member) => member.activeItems > 0)
-    .slice(0, 10)
-    .map(
-      (member) =>
-        `- ${member.name} (${member.role}): ${member.activeItems} active, ${member.blockedCount} blocked, ${member.utilizationPercent}% load`,
-    )
+  const developerLines = team.members
+    .filter((member) => member.role === "DEVELOPER" || member.activeItems > 0)
+    .slice(0, 12)
+    .map((member) => {
+      const idleDays = daysSince(member.lastActivityAt);
+      const topItems = member.assignedItems
+        .slice(0, 6)
+        .map(
+          (item) =>
+            `    • [${item.state}/${item.priority}] ${item.title}${item.milestoneTitle ? ` (${item.milestoneTitle})` : ""}${item.webUrl ? ` ${item.webUrl}` : ""}`,
+        )
+        .join("\n");
+      return `- ${member.name} (${member.role}): active ${member.activeItems}, blocked ${member.blockedCount}, review ${member.inReviewCount}, QA ${member.inQaCount}, MRs ${member.mergeRequestCount}, load ${member.utilizationPercent}%${member.isOverloaded ? " OVERLOADED" : ""}, health ${member.health}, last activity ${idleDays == null ? "unknown" : `${idleDays}d ago`}
+${topItems || "    • No assigned open items"}`;
+    })
     .join("\n");
 
   const releaseLines = [
@@ -48,9 +63,33 @@ export async function buildAssistantContext(): Promise<string> {
   const sprintSection = team.sprint
     ? `Active sprint: ${team.sprint.name}
 Goal: ${team.sprint.goal ?? "—"}
-Progress: ${team.sprint.completedPoints}/${team.sprint.totalPoints} points, ${team.sprint.daysRemaining} days left
-QA paired: ${team.sprint.qaPairedCount}, awaiting QA: ${team.sprint.inReviewCount}`
+Window: ${team.sprint.startDate} → ${team.sprint.endDate} (${team.sprint.daysRemaining} days left)
+Progress: ${team.sprint.completedPoints}/${team.sprint.totalPoints} points
+QA paired: ${team.sprint.qaPairedCount}, QA unassigned: ${team.sprint.qaUnassignedCount}
+In review: ${team.sprint.inReviewCount}, in QA: ${team.sprint.inQaCount}`
     : "No active sprint configured.";
+
+  const qaQueueLines = team.qaQueue
+    .slice(0, 8)
+    .map(
+      (item) =>
+        `- ${item.title} (${item.assigneeName ?? "unassigned"})${item.webUrl ? ` ${item.webUrl}` : ""}`,
+    )
+    .join("\n");
+
+  const atRiskItems = team.sprintWorkItems
+    .filter(
+      (item) =>
+        item.health === "AT_RISK" ||
+        item.health === "CRITICAL" ||
+        item.state === "BLOCKED",
+    )
+    .slice(0, 12)
+    .map(
+      (item) =>
+        `- [${item.health}/${item.state}] ${item.title} — ${item.assigneeName ?? "unassigned"}${item.webUrl ? ` ${item.webUrl}` : ""}`,
+    )
+    .join("\n");
 
   return `
 ## Delivery snapshot (live from EMOS)
@@ -61,10 +100,19 @@ ${followUpLines || "No follow-ups detected."}
 ### Team capacity
 Sprint utilization: ${team.teamCapacity.utilizationPercent}%
 Members over recommended load: ${team.teamCapacity.membersOverCapacity}
-${teamLines || "No assigned work on roster."}
+Allocated: ${team.teamCapacity.allocatedItems} items / ${team.teamCapacity.allocatedPoints} points
+
+### Per-developer dossier
+${developerLines || "No assigned work on roster."}
 
 ### Sprint
 ${sprintSection}
+
+### Stories at risk / blocked
+${atRiskItems || "No at-risk sprint items flagged."}
+
+### QA queue
+${qaQueueLines || "QA queue empty."}
 
 ### Releases
 ${releaseLines || "No active releases."}
@@ -75,7 +123,9 @@ Violations: ${governance.violationCount} (${governance.violationsBySeverity.erro
 `.trim();
 }
 
-export async function buildFollowUpContext(followUpId: string): Promise<string | null> {
+export async function buildFollowUpContext(
+  followUpId: string,
+): Promise<string | null> {
   const item = await followUpsService.getItemById(followUpId);
   if (!item) return null;
 

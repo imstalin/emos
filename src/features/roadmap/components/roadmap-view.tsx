@@ -156,7 +156,12 @@ function RoadmapViewContent({ initialData }: RoadmapViewProps) {
 
   async function handleSaveFields(
     item: RoadmapItem,
-    patch: { title: string; description: string },
+    patch: {
+      title: string;
+      description: string;
+      aiTitle: string;
+      aiDescription: string;
+    },
   ) {
     setErrorMessage(null);
     try {
@@ -168,7 +173,7 @@ function RoadmapViewContent({ initialData }: RoadmapViewProps) {
 
   async function handleAiGenerate(item: RoadmapItem) {
     if (!item.title.trim()) {
-      setErrorMessage("Add a title before generating a description");
+      setErrorMessage("Add a title before generating AI title/description");
       return;
     }
 
@@ -183,6 +188,8 @@ function RoadmapViewContent({ initialData }: RoadmapViewProps) {
           mode: "generate",
           title: item.title,
           description: item.description,
+          aiTitle: item.aiTitle,
+          aiDescription: item.aiDescription,
           project: item.project,
           category: item.category,
           priority: item.priority,
@@ -196,8 +203,15 @@ function RoadmapViewContent({ initialData }: RoadmapViewProps) {
         throw new Error(body?.error ?? "AI request failed");
       }
 
-      const data = (await response.json()) as { description: string };
-      await handleSave({ ...item, description: data.description });
+      const data = (await response.json()) as {
+        aiTitle: string;
+        aiDescription: string;
+      };
+      await handleSave({
+        ...item,
+        aiTitle: data.aiTitle,
+        aiDescription: data.aiDescription,
+      });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "AI request failed");
     } finally {
@@ -208,6 +222,13 @@ function RoadmapViewContent({ initialData }: RoadmapViewProps) {
   async function handleCreateGitLab(item: RoadmapItem) {
     if (!item.title.trim()) {
       setErrorMessage("Add a title before creating a GitLab issue");
+      return;
+    }
+
+    if (!item.aiTitle.trim() && !item.aiDescription.trim()) {
+      setErrorMessage(
+        "Generate or fill AI Title / AI Description before creating a GitLab issue",
+      );
       return;
     }
 
@@ -471,6 +492,8 @@ function itemPayload(item: RoadmapItem) {
     data: item.data,
     title: item.title,
     description: item.description,
+    aiTitle: item.aiTitle,
+    aiDescription: item.aiDescription,
     gitlab: item.gitlab,
     hoursSpent: item.hoursSpent,
   };

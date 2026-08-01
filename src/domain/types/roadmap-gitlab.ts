@@ -30,6 +30,8 @@ export interface RoadmapAiDescriptionRequest {
   mode: "generate" | "rewrite";
   title: string;
   description?: string;
+  aiTitle?: string;
+  aiDescription?: string;
   project: string;
   category: string;
   priority: string;
@@ -38,5 +40,6 @@ export interface RoadmapAiDescriptionRequest {
 }
 
 export interface RoadmapAiDescriptionResponse {
-  description: string;
+  aiTitle: string;
+  aiDescription: string;
 }

@@ -11,6 +11,7 @@ import type { SprintHealth, WorkItemSummary } from "@/domain/types/dashboard";
 import { classifyProductBacklog } from "@/domain/backlog/classify-product-backlog";
 import { checkDatabaseConnection, db } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { gitlabClient } from "@/server/services/gitlab/gitlab-client.service";
 import { getDemoReleasesDashboard } from "@/server/services/releases/releases-demo-data";
 import {
   formatMonthKeyLabel,
@@ -49,6 +50,7 @@ function mapWorkItem(item: {
     priority: item.priority,
     health: item.health,
     assigneeName: item.assignee?.name ?? null,
+    qaOwnerName: null,
     projectName: item.project.name,
     dueDate: item.dueDate?.toISOString() ?? null,
     labels: item.labels,
@@ -155,6 +157,99 @@ function spentHoursFromItem(item: { timeSpentSeconds: number | null }): number {
 export class ReleasesService {
   async syncMonthlyEpics() {
     return releaseEpicSyncService.syncMonthlyReleaseEpics();
+  }
+
+  async moveWorkItemToEpic(input: {
+    workItemId: string;
+    targetEpicIid: number;
+  }): Promise<{ workItemId: string; fromEpicIid: number | null; toEpicIid: number }> {
+    const [workItem, targetEpic] = await Promise.all([
+      db.workItem.findUnique({
+        where: { id: input.workItemId },
+        include: { project: true },
+      }),
+      db.releaseEpic.findFirst({
+        where: { epicIid: input.targetEpicIid },
+      }),
+    ]);
+
+    if (!workItem) {
+      throw new Error("Work item not found");
+    }
+    if (!targetEpic) {
+      throw new Error("Target release epic not found. Sync release epics first.");
+    }
+    if (targetEpic.state !== "opened") {
+      throw new Error("Cannot move a ticket into a closed epic");
+    }
+    if (workItem.type !== "ISSUE") {
+      throw new Error("Only issues can be moved between epics");
+    }
+    if (!workItem.gitlabId) {
+      throw new Error("Work item is missing a GitLab issue id");
+    }
+    if (workItem.parentEpicIid === input.targetEpicIid) {
+      return {
+        workItemId: workItem.id,
+        fromEpicIid: workItem.parentEpicIid,
+        toEpicIid: input.targetEpicIid,
+      };
+    }
+
+    await gitlabClient.assignIssueToEpic(input.targetEpicIid, workItem.gitlabId);
+
+    await db.workItem.update({
+      where: { id: workItem.id },
+      data: { parentEpicIid: input.targetEpicIid },
+    });
+
+    logger.info("Moved work item to release epic", {
+      workItemId: workItem.id,
+      gitlabId: workItem.gitlabId,
+      fromEpicIid: workItem.parentEpicIid,
+      toEpicIid: input.targetEpicIid,
+    });
+
+    return {
+      workItemId: workItem.id,
+      fromEpicIid: workItem.parentEpicIid,
+      toEpicIid: input.targetEpicIid,
+    };
+  }
+
+  async closeEpic(input: {
+    epicId?: string;
+    epicIid?: number;
+  }): Promise<{ epicId: string; epicIid: number; state: string }> {
+    const epic = input.epicId
+      ? await db.releaseEpic.findUnique({ where: { id: input.epicId } })
+      : input.epicIid != null
+        ? await db.releaseEpic.findFirst({ where: { epicIid: input.epicIid } })
+        : null;
+
+    if (!epic) {
+      throw new Error("Release epic not found");
+    }
+    if (epic.state !== "opened") {
+      return { epicId: epic.id, epicIid: epic.epicIid, state: epic.state };
+    }
+
+    const updated = await gitlabClient.updateEpic(epic.epicIid, {
+      state_event: "close",
+    });
+
+    await db.releaseEpic.update({
+      where: { id: epic.id },
+      data: { state: updated.state },
+    });
+
+    logger.info("Closed release epic", {
+      epicId: epic.id,
+      epicIid: epic.epicIid,
+      state: updated.state,
+    });
+
+    return { epicId: epic.id, epicIid: epic.epicIid, state: updated.state };
   }
 
   async getDashboard(): Promise<ReleasesDashboard> {

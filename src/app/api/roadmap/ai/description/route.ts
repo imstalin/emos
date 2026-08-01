@@ -7,6 +7,8 @@ const requestSchema = z.object({
   mode: z.enum(["generate", "rewrite"]),
   title: z.string().trim().min(1),
   description: z.string().optional(),
+  aiTitle: z.string().optional(),
+  aiDescription: z.string().optional(),
   project: z.string().trim().min(1),
   category: z.string().trim().min(1),
   priority: z.string().trim().min(1),

@@ -26,6 +26,7 @@ import type {
   GitLabResourceMilestoneEventRaw,
   GitLabTag,
   GitLabCommit,
+  GitLabUpdateEpicPayload,
   GitLabUpdateIssuePayload,
   GitLabUpdateMergeRequestPayload,
   GitLabUser,
@@ -672,8 +673,21 @@ export class GitLabApiProvider implements GitLabProvider {
     );
   }
 
+  async updateEpic(
+    epicIid: number,
+    payload: GitLabUpdateEpicPayload,
+  ): Promise<GitLabEpic> {
+    return this.putForm<GitLabEpic>(
+      `/groups/${this.config.groupId}/epics/${epicIid}`,
+      this.buildUpdateParams(payload),
+    );
+  }
+
   private buildUpdateParams(
-    payload: GitLabUpdateIssuePayload | GitLabUpdateMergeRequestPayload,
+    payload:
+      | GitLabUpdateIssuePayload
+      | GitLabUpdateMergeRequestPayload
+      | GitLabUpdateEpicPayload,
   ): Array<[string, string]> {
     const entries: Array<[string, string]> = [];
     for (const [key, value] of Object.entries(payload)) {

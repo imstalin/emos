@@ -24,6 +24,7 @@ import type {
   GitLabResourceMilestoneEvent,
   GitLabTag,
   GitLabCommit,
+  GitLabUpdateEpicPayload,
   GitLabUpdateIssuePayload,
   GitLabUpdateMergeRequestPayload,
   GitLabUser,
@@ -173,5 +174,6 @@ export interface GitLabProvider {
   ): Promise<GitLabEpic[]>;
   listEpicIssues(epicIid: number): Promise<GitLabIssue[]>;
   assignIssueToEpic(epicIid: number, issueId: number): Promise<void>;
+  updateEpic(epicIid: number, payload: GitLabUpdateEpicPayload): Promise<GitLabEpic>;
   getCurrentUser(): Promise<GitLabUser>;
 }

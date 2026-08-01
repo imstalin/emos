@@ -25,9 +25,9 @@ export interface AssistantChatResponse {
 }
 
 export const SUGGESTED_PROMPTS = [
-  "What should I follow up on today?",
-  "Who is overloaded on the team?",
-  "Summarize our release readiness",
-  "What are the top delivery risks right now?",
-  "Draft a standup summary for my team",
+  "Give me today's Delivery Coach briefing",
+  "Developer-by-developer analysis with confidence scores",
+  "Draft ready-to-send GitLab follow-ups for blockers",
+  "Who needs attention and why?",
+  "Top risks and recommended priorities for today",
 ] as const;

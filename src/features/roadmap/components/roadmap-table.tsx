@@ -29,6 +29,13 @@ import {
   getPriorityBadgeColor,
 } from "@/features/roadmap/lib/roadmap-utils";
 
+interface RoadmapFieldPatch {
+  title: string;
+  description: string;
+  aiTitle: string;
+  aiDescription: string;
+}
+
 interface RoadmapTableProps {
   items: RoadmapItem[];
   loading?: boolean;
@@ -36,10 +43,7 @@ interface RoadmapTableProps {
   gitlabItemId?: string | null;
   onEdit: (item: RoadmapItem) => void;
   onDelete: (item: RoadmapItem) => void;
-  onSaveFields: (
-    item: RoadmapItem,
-    patch: { title: string; description: string },
-  ) => Promise<void>;
+  onSaveFields: (item: RoadmapItem, patch: RoadmapFieldPatch) => Promise<void>;
   onAiGenerate: (item: RoadmapItem) => Promise<void>;
   onCreateGitLab: (item: RoadmapItem) => void;
 }
@@ -87,8 +91,10 @@ export function RoadmapTable({
             <Table.Th>Include</Table.Th>
             <Table.Th>Project</Table.Th>
             <Table.Th>Category</Table.Th>
-            <Table.Th miw={220}>Title</Table.Th>
-            <Table.Th miw={280}>Description</Table.Th>
+            <Table.Th miw={200}>Title</Table.Th>
+            <Table.Th miw={220}>Description</Table.Th>
+            <Table.Th miw={200}>AI Title</Table.Th>
+            <Table.Th miw={240}>AI Description</Table.Th>
             <Table.Th>Quarter</Table.Th>
             <Table.Th>Timeline</Table.Th>
             <Table.Th>Assignee</Table.Th>
@@ -136,30 +142,38 @@ function RoadmapTableRow({
   gitlabLoading: boolean;
   onEdit: (item: RoadmapItem) => void;
   onDelete: (item: RoadmapItem) => void;
-  onSaveFields: (
-    item: RoadmapItem,
-    patch: { title: string; description: string },
-  ) => Promise<void>;
+  onSaveFields: (item: RoadmapItem, patch: RoadmapFieldPatch) => Promise<void>;
   onAiGenerate: (item: RoadmapItem) => Promise<void>;
   onCreateGitLab: (item: RoadmapItem) => void;
 }) {
   const [title, setTitle] = useState(item.title);
   const [description, setDescription] = useState(item.description);
+  const [aiTitle, setAiTitle] = useState(item.aiTitle);
+  const [aiDescription, setAiDescription] = useState(item.aiDescription);
   const [savingFields, setSavingFields] = useState(false);
 
   useEffect(() => {
     setTitle(item.title);
     setDescription(item.description);
-  }, [item.id, item.title, item.description]);
+    setAiTitle(item.aiTitle);
+    setAiDescription(item.aiDescription);
+  }, [item.id, item.title, item.description, item.aiTitle, item.aiDescription]);
 
   async function persistIfChanged() {
     const nextTitle = title.trim();
     const nextDescription = description.trim();
+    const nextAiTitle = aiTitle.trim();
+    const nextAiDescription = aiDescription.trim();
     if (!nextTitle) {
       setTitle(item.title);
       return;
     }
-    if (nextTitle === item.title && nextDescription === item.description) {
+    if (
+      nextTitle === item.title &&
+      nextDescription === item.description &&
+      nextAiTitle === item.aiTitle &&
+      nextAiDescription === item.aiDescription
+    ) {
       return;
     }
 
@@ -168,11 +182,21 @@ function RoadmapTableRow({
       await onSaveFields(item, {
         title: nextTitle,
         description: nextDescription,
+        aiTitle: nextAiTitle,
+        aiDescription: nextAiDescription,
       });
     } finally {
       setSavingFields(false);
     }
   }
+
+  const draftItem: RoadmapItem = {
+    ...item,
+    title: title.trim(),
+    description: description.trim(),
+    aiTitle: aiTitle.trim(),
+    aiDescription: aiDescription.trim(),
+  };
 
   return (
     <Table.Tr>
@@ -207,8 +231,33 @@ function RoadmapTableRow({
           value={description}
           onChange={(event) => setDescription(event.currentTarget.value)}
           onBlur={() => void persistIfChanged()}
-          placeholder="Description for AI / GitLab issue body"
+          placeholder="Planning description"
           aria-label={`Description for ${item.title || item.id}`}
+          disabled={savingFields || aiLoading}
+        />
+      </Table.Td>
+      <Table.Td>
+        <TextInput
+          size="xs"
+          value={aiTitle}
+          onChange={(event) => setAiTitle(event.currentTarget.value)}
+          onBlur={() => void persistIfChanged()}
+          placeholder="GitLab title"
+          aria-label={`AI title for ${item.id}`}
+          disabled={savingFields || aiLoading}
+        />
+      </Table.Td>
+      <Table.Td>
+        <Textarea
+          size="xs"
+          minRows={2}
+          autosize
+          maxRows={6}
+          value={aiDescription}
+          onChange={(event) => setAiDescription(event.currentTarget.value)}
+          onBlur={() => void persistIfChanged()}
+          placeholder="GitLab description"
+          aria-label={`AI description for ${item.title || item.id}`}
           disabled={savingFields || aiLoading}
         />
       </Table.Td>
@@ -247,28 +296,30 @@ function RoadmapTableRow({
       </Table.Td>
       <Table.Td>
         <Group gap={4} wrap="nowrap">
-          <Tooltip label="AI generate description from title">
+          <Tooltip label="AI generate GitLab title + description">
             <ActionIcon
               variant="subtle"
               color="violet"
               loading={aiLoading}
               disabled={!title.trim() || savingFields}
-              onClick={() => void onAiGenerate({ ...item, title, description })}
-              aria-label={`AI generate description for ${item.title}`}
+              onClick={() => void onAiGenerate(draftItem)}
+              aria-label={`AI generate for ${item.title}`}
             >
               <IconSparkles size={16} />
             </ActionIcon>
           </Tooltip>
           {!item.gitlab ? (
-            <Tooltip label="Create GitLab ticket (uses Title + Description)">
+            <Tooltip label="Create GitLab ticket (uses AI Title + AI Description)">
               <ActionIcon
                 variant="subtle"
                 color="orange"
                 loading={gitlabLoading}
-                disabled={!title.trim() || savingFields}
-                onClick={() =>
-                  onCreateGitLab({ ...item, title: title.trim(), description: description.trim() })
+                disabled={
+                  !title.trim() ||
+                  savingFields ||
+                  (!aiTitle.trim() && !aiDescription.trim())
                 }
+                onClick={() => onCreateGitLab(draftItem)}
                 aria-label={`Create GitLab ticket for ${item.title}`}
               >
                 <IconBrandGitlab size={16} />

@@ -42,6 +42,8 @@ interface RoadmapFormValues {
   data: boolean;
   title: string;
   description: string;
+  aiTitle: string;
+  aiDescription: string;
 }
 
 interface RoadmapFormProps {
@@ -69,6 +71,8 @@ function toFormValues(item: RoadmapItem | null): RoadmapFormValues {
     data: base.data,
     title: base.title,
     description: base.description,
+    aiTitle: base.aiTitle,
+    aiDescription: base.aiDescription,
   };
 }
 
@@ -101,6 +105,8 @@ function buildItemFromForm(
     data: values.data,
     title: values.title.trim(),
     description: values.description.trim(),
+    aiTitle: values.aiTitle.trim(),
+    aiDescription: values.aiDescription.trim(),
     gitlab: existing?.gitlab,
     hoursSpent: existing?.hoursSpent,
   };
@@ -184,6 +190,8 @@ export function RoadmapForm({
           mode,
           title: form.values.title,
           description: form.values.description,
+          aiTitle: form.values.aiTitle,
+          aiDescription: form.values.aiDescription,
           project: form.values.project,
           category: form.values.category,
           priority: form.values.priority,
@@ -197,8 +205,12 @@ export function RoadmapForm({
         throw new Error(body?.error ?? "AI request failed");
       }
 
-      const data = (await response.json()) as { description: string };
-      form.setFieldValue("description", data.description);
+      const data = (await response.json()) as {
+        aiTitle: string;
+        aiDescription: string;
+      };
+      form.setFieldValue("aiTitle", data.aiTitle);
+      form.setFieldValue("aiDescription", data.aiDescription);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "AI request failed");
     } finally {
@@ -212,6 +224,13 @@ export function RoadmapForm({
 
     if (!form.values.title.trim()) {
       setErrorMessage("Add a title before creating a GitLab issue");
+      return;
+    }
+
+    if (!form.values.aiTitle.trim() && !form.values.aiDescription.trim()) {
+      setErrorMessage(
+        "Generate or fill AI Title / AI Description before creating a GitLab issue (GitLab uses those fields).",
+      );
       return;
     }
 
@@ -411,10 +430,18 @@ export function RoadmapForm({
 
             <TextInput label="Title" required {...form.getInputProps("title")} />
 
+            <Textarea
+              label="Description"
+              minRows={3}
+              autosize
+              description="Planning notes from the roadmap workbook"
+              {...form.getInputProps("description")}
+            />
+
             <Stack gap="xs">
               <Group justify="space-between" align="center">
                 <Text size="sm" fw={500}>
-                  Description
+                  AI Title / Description
                 </Text>
                 <Group gap="xs">
                   <Button
@@ -422,6 +449,7 @@ export function RoadmapForm({
                     variant="light"
                     size="compact-sm"
                     loading={aiLoading}
+                    disabled={!form.values.title.trim()}
                     onClick={() => void runAi("generate")}
                   >
                     AI generate
@@ -431,14 +459,30 @@ export function RoadmapForm({
                     variant="light"
                     size="compact-sm"
                     loading={aiLoading}
-                    disabled={!form.values.description.trim()}
+                    disabled={
+                      !form.values.aiTitle.trim() && !form.values.aiDescription.trim()
+                    }
                     onClick={() => void runAi("rewrite")}
                   >
                     AI rewrite
                   </Button>
                 </Group>
               </Group>
-              <Textarea minRows={4} autosize {...form.getInputProps("description")} />
+              <Text size="xs" c="dimmed">
+                Used when creating the GitLab issue (falls back to Title / Description if empty).
+              </Text>
+              <TextInput
+                label="AI Title"
+                placeholder="GitLab issue title"
+                {...form.getInputProps("aiTitle")}
+              />
+              <Textarea
+                label="AI Description"
+                minRows={4}
+                autosize
+                placeholder="GitLab issue body"
+                {...form.getInputProps("aiDescription")}
+              />
             </Stack>
 
             {!hasGitLabLink ? (

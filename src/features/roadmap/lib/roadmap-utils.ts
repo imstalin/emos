@@ -103,7 +103,9 @@ export function filterRoadmapItems(
 
     return (
       item.title.toLowerCase().includes(query) ||
-      item.description.toLowerCase().includes(query)
+      item.description.toLowerCase().includes(query) ||
+      item.aiTitle.toLowerCase().includes(query) ||
+      item.aiDescription.toLowerCase().includes(query)
     );
   });
 }
@@ -215,5 +217,7 @@ export function createEmptyRoadmapItem(): Omit<RoadmapItem, "id"> {
     data: false,
     title: "",
     description: "",
+    aiTitle: "",
+    aiDescription: "",
   };
 }

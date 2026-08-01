@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import type { RoadmapItem } from "@/domain/types/roadmap";
 import {
+  buildGitLabIssuePreview,
   buildGitLabLabels,
   hoursToGitLabWeight,
   resolveGitLabAssignee,
+  resolveGitLabIssueBody,
+  resolveGitLabIssueTitle,
 } from "@/server/services/roadmap/roadmap-gitlab.mapper";
 
 const sampleItem: RoadmapItem = {
@@ -22,6 +25,8 @@ const sampleItem: RoadmapItem = {
   data: false,
   title: "Sample roadmap item",
   description: "Sample description",
+  aiTitle: "",
+  aiDescription: "",
 };
 
 describe("roadmap-gitlab.mapper", () => {
@@ -44,5 +49,29 @@ describe("roadmap-gitlab.mapper", () => {
       { id: 1, username: "mjayapal", name: "Muruganandham Jayapal" },
     ]);
     expect(member?.username).toBe("mjayapal");
+  });
+
+  it("prefers AI title and description for GitLab issues", () => {
+    const withAi: RoadmapItem = {
+      ...sampleItem,
+      aiTitle: "AI polished title",
+      aiDescription: "AI polished body",
+    };
+    expect(resolveGitLabIssueTitle(withAi)).toBe("AI polished title");
+    expect(resolveGitLabIssueBody(withAi)).toBe("AI polished body");
+
+    const preview = buildGitLabIssuePreview(withAi, {
+      projectName: "admin",
+      milestoneTitle: null,
+      assignee: null,
+      parentEpic: null,
+    });
+    expect(preview.title).toBe("AI polished title");
+    expect(preview.description).toContain("AI polished body");
+  });
+
+  it("falls back to planning title/description when AI fields are empty", () => {
+    expect(resolveGitLabIssueTitle(sampleItem)).toBe("Sample roadmap item");
+    expect(resolveGitLabIssueBody(sampleItem)).toBe("Sample description");
   });
 });

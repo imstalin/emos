@@ -62,6 +62,8 @@ function rowToItem(row: DbRoadmapItem): RoadmapItem {
     data: row.data,
     title: row.title,
     description: row.description,
+    aiTitle: row.aiTitle,
+    aiDescription: row.aiDescription,
     gitlab: parseGitLab(row.gitlab),
     hoursSpent: row.hoursSpent ?? undefined,
   };
@@ -69,7 +71,11 @@ function rowToItem(row: DbRoadmapItem): RoadmapItem {
 
 function itemsFromLegacyJson(value: Prisma.JsonValue): RoadmapItem[] {
   if (!Array.isArray(value)) return [];
-  return value as unknown as RoadmapItem[];
+  return (value as unknown as RoadmapItem[]).map((item) => ({
+    ...item,
+    aiTitle: item.aiTitle ?? "",
+    aiDescription: item.aiDescription ?? "",
+  }));
 }
 
 function itemFieldData(item: RoadmapItem, position: number) {
@@ -88,6 +94,8 @@ function itemFieldData(item: RoadmapItem, position: number) {
     data: item.data,
     title: item.title,
     description: item.description,
+    aiTitle: item.aiTitle ?? "",
+    aiDescription: item.aiDescription ?? "",
     gitlab: (item.gitlab ?? null) as unknown as Prisma.InputJsonValue,
     hoursSpent: item.hoursSpent ?? null,
     position,
@@ -329,6 +337,8 @@ export class RoadmapService {
             data: input.data,
             title: input.title,
             description: input.description,
+            aiTitle: input.aiTitle ?? "",
+            aiDescription: input.aiDescription ?? "",
             gitlab: (input.gitlab ?? null) as unknown as Prisma.InputJsonValue,
             hoursSpent: input.hoursSpent ?? null,
           },
