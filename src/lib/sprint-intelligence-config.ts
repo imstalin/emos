@@ -30,7 +30,10 @@ const sprintIntelligenceEnvSchema = z.object({
   hotfixExcludedFromCommitment: boolFromEnv.default(true),
   uatExcludedFromCommitment: boolFromEnv.default(false),
   maxConcurrency: z.coerce.number().int().positive().default(5),
-  maxPages: z.coerce.number().int().positive().optional(),
+  maxPages: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.coerce.number().int().positive().optional(),
+  ),
 });
 
 export type SprintIntelligenceEnvConfig = z.infer<
