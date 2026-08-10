@@ -1,0 +1,29 @@
+
+
+Issue:
+https://gitlab.biw-services.com/phoenix/support/release-observations/-/work_items/397
+
+MR:
+https://gitlab.biw-services.com/phoenix/workers/flow-engine/-/merge_requests/new?merge_request%5Bsource_branch%5D=bugfix%2Fsftp-errorout-flow
+
+Fixed : 
+Root cause: When a workflow task failed (e.g. duplicate external/unique identifier), the flow was marked errored but remaining steps never ran — so WriteToS3 → uploadedLogs → SFTP OUT never executed. postFlowExecute also forced status back to completed.
+
+Fixes
+workers/flow-engine runtime — On task failure, keep status as errored, then continue remaining tasks so error-log export still runs and flowExecuted is triggered.
+
+BulkInsertTask — On batch failure (e.g. unique constraint), mark affected rows as Error in the local file spec before rethrowing, so the OUT CSV includes those rows.
+
+postFlowExecute (business-tasks) — Do not overwrite errored/failed status; still upload the result/error file to SFTP OUT when uploadedLogs exists; log clearly when it does not.
+
+WriteToS3Task — Handle empty datasets so export does not crash.
+
+Expected result after deploy
+For Toyota (Product/Sales/User/Org) and TVS (Product Points/External Coupon) SFTP uploads: if the admin workflow shows Errored due to duplicate/line-level failures, the error CSV should still land in the SFTP OUT folder (visible in FileZilla). Archive still holds the original IN file as before.
+
+
+---------------------------------
+perf: reduce invoice and coupon claim hot-path overhead
+Dedupe hierarchy walks, fix rejectClaim transaction handling, scope
+uniqueIdentifier checks to the request, and send primary org id on
+coupon fraud events.
