@@ -23,6 +23,7 @@ import {
   Settings,
   Shield,
   Sparkles,
+  TrendingUp,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -64,6 +65,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Clock,
   Shield,
   Settings,
+  TrendingUp,
 };
 
 const ALL_NAV_HREFS = NAV_ITEMS.flatMap((group) =>

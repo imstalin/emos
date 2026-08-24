@@ -105,6 +105,56 @@ enum SprintLabelActionStatus {
   REJECTED
 }
 
+enum ProgressAlignment {
+  ALIGNED
+  SUPPORTING
+  UNPLANNED
+  UNKNOWN
+}
+
+enum WorkClassification {
+  PLANNED_FEATURE
+  ENHANCEMENT
+  DEFECT
+  HOTFIX
+  PRODUCTION_SUPPORT
+  TECHNICAL_MAINTENANCE
+  UNPLANNED
+  UNKNOWN
+}
+
+enum CorrelationConfidence {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum ProgressMovement {
+  MEANINGFUL_PROGRESS
+  ACTIVE_NO_MOVEMENT
+  BLOCKED
+  SLIPPING
+  COMPLETED
+}
+
+enum BlockerCategory {
+  TECHNICAL
+  QA
+  ENVIRONMENT
+  PRODUCT_DECISION
+  EXTERNAL_TEAM
+  REVIEW
+  RELEASE
+  INFRASTRUCTURE
+  UNKNOWN
+}
+
+enum ManagerAttentionSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
 // ─── Team & People ───────────────────────────────────────────────────────────
 
 model Team {
@@ -113,8 +163,10 @@ model Team {
   slug      String       @unique
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
-  members   TeamMember[]
-  sprints   Sprint[]
+  members               TeamMember[]
+  sprints               Sprint[]
+  engineeringPriorities EngineeringPriority[]
+  progressWorkItems     ProgressWorkItem[]
 }
 
 model TeamMember {
@@ -130,11 +182,16 @@ model TeamMember {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  team             Team                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  workItems        WorkItem[]           @relation("Assignee")
-  reviews          WorkItem[]           @relation("Reviewer")
-  qaOwnedWorkItems WorkItem[]           @relation("QaOwner")
-  connectSessions  Connect3030Session[]
+  team                    Team                      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  workItems               WorkItem[]                @relation("Assignee")
+  reviews                 WorkItem[]                @relation("Reviewer")
+  qaOwnedWorkItems        WorkItem[]                @relation("QaOwner")
+  connectSessions         Connect3030Session[]
+  gitlabFeed              GitLabMemberFeed?
+  feedActivities          GitLabFeedActivity[]
+  ownedProgressItems      ProgressWorkItem[]        @relation("ProgressOwner")
+  engineeringPriorities   EngineeringPriority[]     @relation("PriorityOwner")
+  managerOverrides        ManagerOverride[]         @relation("OverrideAuthor")
 
   @@unique([teamId, email])
   @@index([teamId])
@@ -609,4 +666,216 @@ model SprintIntelligenceProjectConfig {
 
   @@index([projectId])
   @@index([enabled])
+}
+
+// ─── Manager Progress (GitLab Atom Feeds) ─────────────────────────────────────
+
+model GitLabMemberFeed {
+  id              String    @id @default(cuid())
+  memberId        String    @unique
+  /// Environment variable name holding the full feed URL (never store token in DB)
+  feedEnvKey      String
+  isEnabled       Boolean   @default(true)
+  lastFetchAt     DateTime?
+  lastSuccessAt   DateTime?
+  lastEventAt     DateTime?
+  lastEventId     String?
+  lastHttpStatus  Int?
+  lastError       String?
+  parseError      String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  member     TeamMember           @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  activities GitLabFeedActivity[]
+
+  @@index([isEnabled])
+}
+
+model GitLabFeedActivity {
+  id            String   @id @default(cuid())
+  feedId        String
+  memberId      String
+  gitlabEventId String   @unique
+  eventType     String
+  title         String
+  description   String?  @db.Text
+  url           String?
+  project       String?
+  repository    String?
+  branch        String?
+  commitSha     String?
+  mrNumber      Int?
+  issueNumber   Int?
+  pipelineId    Int?
+  environment   String?
+  timestamp     DateTime
+  rawPayload    Json     @default("{}")
+  createdAt     DateTime @default(now())
+
+  feed              GitLabMemberFeed         @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  member            TeamMember               @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  workItemLinks     ProgressWorkItemActivity[]
+
+  @@index([memberId, timestamp])
+  @@index([feedId])
+  @@index([eventType])
+  @@index([timestamp])
+  @@index([mrNumber])
+  @@index([issueNumber])
+}
+
+model EngineeringPriority {
+  id              String    @id @default(cuid())
+  name            String
+  description     String?   @db.Text
+  teamId          String?
+  ownerId         String?
+  priorityOrder   Int       @default(0)
+  status          String    @default("active")
+  targetDate      DateTime?
+  releaseDate     DateTime?
+  keywords        String[]  @default([])
+  projectMappings String[]  @default([])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  team       Team?              @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  owner      TeamMember?        @relation("PriorityOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  workItems  ProgressWorkItem[]
+
+  @@index([teamId])
+  @@index([status])
+  @@index([priorityOrder])
+}
+
+model ProgressWorkItem {
+  id                       String              @id @default(cuid())
+  externalReference        String?
+  title                    String
+  project                  String?
+  ownerId                  String?
+  teamId                   String?
+  priorityId               String?
+  classification           WorkClassification  @default(UNKNOWN)
+  alignment                ProgressAlignment   @default(UNKNOWN)
+  stage                    String              @default("backlog")
+  status                   String              @default("active")
+  targetDate               DateTime?
+  lastMeaningfulProgressAt DateTime?
+  correlationConfidence    CorrelationConfidence @default(LOW)
+  nextAction               String?
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+
+  owner            TeamMember?                @relation("ProgressOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  team             Team?                      @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  priority         EngineeringPriority?       @relation(fields: [priorityId], references: [id], onDelete: SetNull)
+  activityLinks    ProgressWorkItemActivity[]
+  snapshots        ProgressSnapshot[]
+  blockers         ProgressBlocker[]
+  attentionItems   ManagerAttentionItem[]
+  overrides        ManagerOverride[]
+
+  @@index([ownerId])
+  @@index([teamId])
+  @@index([priorityId])
+  @@index([stage])
+  @@index([status])
+  @@index([externalReference])
+  @@index([lastMeaningfulProgressAt])
+}
+
+model ProgressWorkItemActivity {
+  id         String   @id @default(cuid())
+  workItemId String
+  activityId String
+  createdAt  DateTime @default(now())
+
+  workItem ProgressWorkItem   @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  activity GitLabFeedActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@unique([workItemId, activityId])
+  @@index([workItemId])
+  @@index([activityId])
+}
+
+model ProgressSnapshot {
+  id            String           @id @default(cuid())
+  workItemId    String
+  snapshotDate  DateTime         @db.Date
+  previousStage String?
+  currentStage  String
+  movement      ProgressMovement @default(ACTIVE_NO_MOVEMENT)
+  summary       String?          @db.Text
+  blocker       String?
+  risk          String?
+  createdAt     DateTime         @default(now())
+
+  workItem ProgressWorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+
+  @@unique([workItemId, snapshotDate])
+  @@index([snapshotDate])
+  @@index([movement])
+}
+
+model ProgressBlocker {
+  id          String          @id @default(cuid())
+  workItemId  String
+  category    BlockerCategory @default(UNKNOWN)
+  description String          @db.Text
+  isConfirmed Boolean         @default(false)
+  isResolved  Boolean         @default(false)
+  sourceActivityId String?
+  resolvedAt  DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  workItem ProgressWorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+
+  @@index([workItemId])
+  @@index([isResolved])
+}
+
+model ManagerAttentionItem {
+  id          String                   @id @default(cuid())
+  workItemId  String?
+  priorityId  String?
+  ruleKey     String
+  title       String
+  description String                   @db.Text
+  severity    ManagerAttentionSeverity @default(WARNING)
+  isDismissed Boolean                  @default(false)
+  snapshotDate DateTime                @db.Date
+  createdAt   DateTime                 @default(now())
+
+  workItem ProgressWorkItem? @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+
+  @@index([snapshotDate])
+  @@index([severity])
+  @@index([isDismissed])
+}
+
+model ManagerOverride {
+  id         String   @id @default(cuid())
+  workItemId String
+  authorId   String?
+  field      String
+  oldValue   String?
+  newValue   String
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  workItem ProgressWorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  author   TeamMember?      @relation("OverrideAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([workItemId])
+  @@index([field])
+}
+
+model ManagerProgressConfig {
+  id    String @id @default("default")
+  /// Thresholds, lifecycle stages, holidays, WIP limits
+  config Json  @default("{}")
+  updatedAt DateTime @updatedAt
 }

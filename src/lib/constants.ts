@@ -6,6 +6,7 @@ export const NAV_ITEMS = [
     items: [
       { title: "Dashboard", href: "/", icon: "LayoutDashboard" },
       { title: "Team Dashboard", href: "/team", icon: "Users" },
+      { title: "Engineering Progress", href: "/manager/progress", icon: "TrendingUp" },
       { title: "30:30 Connect", href: "/connect-3030", icon: "MessageSquare" },
     ],
   },

@@ -1,0 +1,157 @@
+import type { ManagerProgressDashboard } from "@/domain/types/manager-progress";
+import { DEFAULT_LIFECYCLE_STAGES } from "@/domain/types/manager-progress";
+
+const demoRows = [
+  {
+    workItemId: "demo-tsc",
+    priorityName: "TSC Production",
+    priorityId: "demo-priority-tsc",
+    ownerName: "Selvam Kadarkarai",
+    ownerId: "demo-member-selvam",
+    teamName: "Phoenix QA",
+    teamId: "demo-team-qa",
+    progressToday: "meaningful_progress" as const,
+    stage: "release_ready",
+    stageLabel: "Release Ready",
+    blocker: null,
+    targetDate: new Date(Date.now() + 86400000).toISOString(),
+    managerAttention: false,
+    classification: "PLANNED_FEATURE" as const,
+    alignment: "ALIGNED" as const,
+    externalReference: "TSC",
+    title: "TSC Production delivery",
+    nextAction: "QA/PPRD release confirmation",
+    lastMeaningfulProgressAt: new Date().toISOString(),
+    activeWipCount: 3,
+  },
+  {
+    workItemId: "demo-search",
+    priorityName: "Advanced Search",
+    priorityId: "demo-priority-search",
+    ownerName: "Selvam Kadarkarai",
+    ownerId: "demo-member-selvam",
+    teamName: "Phoenix QA",
+    teamId: "demo-team-qa",
+    progressToday: "meaningful_progress" as const,
+    stage: "qa",
+    stageLabel: "QA",
+    blocker: null,
+    targetDate: null,
+    managerAttention: true,
+    classification: "ENHANCEMENT" as const,
+    alignment: "ALIGNED" as const,
+    externalReference: "Advanced Search",
+    title: "Advanced Search Admin/API integration",
+    nextAction: "Mobile regression validation",
+    lastMeaningfulProgressAt: new Date().toISOString(),
+    activeWipCount: 3,
+  },
+  {
+    workItemId: "demo-rewards",
+    priorityName: "Rewards Expiry",
+    priorityId: "demo-priority-rewards",
+    ownerName: "Selvam Kadarkarai",
+    ownerId: "demo-member-selvam",
+    teamName: "Phoenix QA",
+    teamId: "demo-team-qa",
+    progressToday: "blocked" as const,
+    stage: "pprd",
+    stageLabel: "PPRD / Pre-production",
+    blocker: "Possible blocker: Suitable expiry-enabled PPRD tenant unavailable.",
+    targetDate: null,
+    managerAttention: true,
+    classification: "HOTFIX" as const,
+    alignment: "ALIGNED" as const,
+    externalReference: "Rewards Expiry",
+    title: "Rewards Expiry hotfix",
+    nextAction: "Resolve test-environment dependency",
+    lastMeaningfulProgressAt: new Date().toISOString(),
+    activeWipCount: 3,
+  },
+  {
+    workItemId: "demo-cash",
+    priorityName: "Cash Rewards Phase 2",
+    priorityId: "demo-priority-cash",
+    ownerName: "Kumar Saravana",
+    ownerId: "demo-member-saravana",
+    teamName: "Phoenix Core",
+    teamId: "demo-team-core",
+    progressToday: "active_no_movement" as const,
+    stage: "development",
+    stageLabel: "Development",
+    blocker: null,
+    targetDate: null,
+    managerAttention: false,
+    classification: "PLANNED_FEATURE" as const,
+    alignment: "ALIGNED" as const,
+    externalReference: "Cash Rewards Phase 2",
+    title: "Cash Rewards Phase 2",
+    nextAction: null,
+    lastMeaningfulProgressAt: null,
+    activeWipCount: 2,
+  },
+];
+
+export function getDemoManagerProgressDashboard(): ManagerProgressDashboard {
+  const moving = demoRows.filter((r) => r.progressToday === "meaningful_progress");
+  const stagnant = demoRows.filter((r) => r.progressToday === "active_no_movement");
+  const blocked = demoRows.filter((r) => r.blocker || r.progressToday === "blocked");
+  const attention = demoRows.filter((r) => r.managerAttention);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    date: new Date().toISOString().slice(0, 10),
+    feedHealthWarning: false,
+    summary: {
+      date: new Date().toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+      }),
+      overall: {
+        prioritiesMoved: moving.length,
+        prioritiesBlocked: blocked.length,
+        releaseReadyCount: 1,
+      },
+      majorProgress: [
+        "TSC delivery changes merged.",
+        "Advanced Search Admin/API integration completed.",
+        "Rewards-expiry hotfix merged.",
+      ],
+      managerAttention: [
+        "PPRD expiry validation blocked by test-environment availability.",
+        "Mobile regression validation remains pending.",
+      ],
+      noMovement: ["Cash Rewards Phase 2."],
+    },
+    sections: [
+      { key: "moving", title: "Priorities Moving Today", items: moving },
+      { key: "stagnant", title: "Priorities With No Movement", items: stagnant },
+      { key: "blocked", title: "Blocked Work", items: blocked },
+      { key: "attention", title: "Manager Attention", items: attention },
+      {
+        key: "release",
+        title: "Release / Production Readiness",
+        items: demoRows.filter((r) => r.stage === "release_ready"),
+      },
+      { key: "unplanned", title: "Unplanned / Support Work", items: [] },
+    ],
+    mainTable: demoRows,
+    filters: {
+      teams: [
+        { id: "demo-team-core", name: "Phoenix Core" },
+        { id: "demo-team-qa", name: "Phoenix QA" },
+      ],
+      owners: [
+        { id: "demo-member-selvam", name: "Selvam Kadarkarai" },
+        { id: "demo-member-saravana", name: "Kumar Saravana" },
+      ],
+      priorities: [
+        { id: "demo-priority-tsc", name: "TSC Production" },
+        { id: "demo-priority-search", name: "Advanced Search" },
+        { id: "demo-priority-rewards", name: "Rewards Expiry" },
+        { id: "demo-priority-cash", name: "Cash Rewards Phase 2" },
+      ],
+      stages: DEFAULT_LIFECYCLE_STAGES,
+    },
+  };
+}

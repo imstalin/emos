@@ -3,6 +3,7 @@ import "dotenv/config";
 import { getGitLabConfig } from "@/lib/gitlab-config";
 import { logger } from "@/lib/logger";
 import { getSyncIntervalMinutes } from "@/lib/sync-config";
+import { getManagerProgressFeedIntervalMinutes } from "@/lib/manager-progress-config";
 import { getSprintIntelligenceEnvConfig } from "@/lib/sprint-intelligence-config";
 import {
   closeGitLabSyncQueue,
@@ -14,6 +15,12 @@ import {
 } from "@/server/queues/sprint-intelligence.queue";
 import { createGitLabSyncWorker } from "@/server/workers/gitlab-sync.worker";
 import { createSprintIntelligenceWorker } from "@/server/workers/sprint-intelligence.worker";
+import {
+  closeManagerProgressQueue,
+  scheduleManagerProgressFeedIngestion,
+} from "@/server/queues/manager-progress-feed.queue";
+import { createManagerProgressFeedWorker } from "@/server/workers/manager-progress-feed.worker";
+import { isManagerProgressEnabled } from "@/lib/manager-progress-config";
 
 async function main() {
   if (!getGitLabConfig()) {
@@ -41,12 +48,24 @@ async function main() {
     concurrency: sprintEnv.workerConcurrency,
   });
 
+  let managerProgressWorker: ReturnType<typeof createManagerProgressFeedWorker> | null =
+    null;
+  if (isManagerProgressEnabled()) {
+    managerProgressWorker = createManagerProgressFeedWorker();
+    await scheduleManagerProgressFeedIngestion();
+    logger.info("Manager progress feed worker started", {
+      intervalMinutes: getManagerProgressFeedIntervalMinutes(),
+    });
+  }
+
   const shutdown = async (signal: string) => {
     logger.info(`Received ${signal}, shutting down workers`);
     await gitlabWorker.close();
     await sprintWorker.close();
+    if (managerProgressWorker) await managerProgressWorker.close();
     await closeGitLabSyncQueue();
     await closeSprintIntelligenceQueue();
+    await closeManagerProgressQueue();
     process.exit(0);
   };
 
