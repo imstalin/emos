@@ -1,0 +1,99 @@
+AIDLC - SDD Development
+|--- Develop SDD for the following systems:
+Mumbai Marathon 2026
+
+
+
+Monday - TO Do 
+
+
+1. Timesheet Submission
+2. Zing HR Approval
+3. Sprint Planning - Completed 
+4. KPI Metrics Sharing - Completed
+5. Agentic AI Architecture Discussoin
+6. Connect Voice of Employee Discussion
+7. Channels Core Leadership Meetings
+8. Release Observations - Issue Count
+9. Core Product  - Issue Count
+10. Feature Development List for Team 
+11. QA Reset Stragery 
+12. China Production Deplpoyment 
+13. Weekly Status Report - (Data , Mobile , Core)
+
+
+Tuesday 
+
+1. ISO Audit Meeting Kick Start
+2. Channles Feature Activation Meetings
+3. Fortnight Meetings - With Prasad
+3. Phoenix GM Import Assements 
+4. Monthly OPS Review Meetings
+
+Wednesday
+
+1. ISO Meetings - 10 - 12
+2. Phoenix Audit Meeings 
+3. DPDPA - Update
+4. Weekly Trigae Meetings - Conflicts
+5. Channels Technical Activation Meetings
+6. Agentic AI Architecture Discussoin
+7. ISO Meetings - 10 - 12
+8. Fortnight Connect with Stakeholders
+
+Thursday
+
+1. Channles Core Connect
+2. FGD - Voice of Employee
+
+
+Friday
+1. Monthly Governance Meetings with Prasad
+2. Agentic AI Architecture Discussoin
+
+------------
+
+EM
+Weekly Status Update
+Roadmap - Next 3 months
+Support to Delivery Team
+Sprint Executions
+
+
+
+List out works should have completed last week.
+
+1. Timesheet Submission
+2. Zing HR Approval -- Parital - 50%
+3. Sprint Planning -- Completed 
+4. KPI Metrics Sharing -- Completed 
+5. China Production Deployment 
+6. ISO Audit Findings
+7. DPDPA Update -- Completed 
+
+List out works should be completed by Monday 
+
+1. Weekly Status Report - (Data , Mobile , Core) --Completed
+2. Agentic AI Architecture Discussoin
+3. Connect Voice of Employee Discussion
+4. Channels Core Leadership Meetings
+5. Release Observations - Issue Count - 69
+6. Core Product  - Issue Count - 25
+7. Feature Development List for Team 
+8. QA Reset Stragery 
+
+
+---
+SQS - Queue Management System - Banking 
+Pick all Ready for Delivery QA - Tasks and share with Delivery Team and closed this task, This is QA team responsibility.
+
+
+---------
+
+imstalin@Stalins-MacBook-Air Git % yt-dlp \
+  --skip-download \
+  --print '"%(upload_date)s","%(title)s","%(duration_string)s","%(view_count)s","https://www.youtube.com/watch?v=%(id)s"' \
+  "https://www.youtube.com/@RajRamesh/videos" \
+  > raj-ramesh-full.cs
+
+  -----------
